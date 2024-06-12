@@ -212,7 +212,7 @@ static int vGetArgs1_impl(AlifObject* compatArgs, AlifObject* const* stack, int6
     return cleanReturn(1, &freeList);
 }
 
-int _alifArg_checkPositional(const wchar_t* name, int64_t nargs, int64_t min, int64_t max)
+int alifSubArg_checkPositional(const wchar_t* name, int64_t nargs, int64_t min, int64_t max)
 {
 
     if (nargs < min) {

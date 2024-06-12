@@ -4,6 +4,10 @@
 AlifObject* alifSubObject_new(AlifTypeObject*);
 AlifVarObject* alifSubObject_newVar(AlifTypeObject*, int64_t);
 
+void alifObjectGC_track(void*);
+
+void alifObjectGC_unTrack(void*);
+
 
 #define ALIFOBJECT_NEW(_type, _typeObj) ((_type *)alifSubObject_new(_typeObj))
 

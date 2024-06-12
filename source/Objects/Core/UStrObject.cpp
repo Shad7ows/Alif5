@@ -2666,7 +2666,7 @@ static AlifObject* split(AlifObject* _self, AlifObject* _substring, int64_t _max
 		out = alifNew_list(1);
 		if (out == nullptr)
 			return nullptr;
-		((AlifListObject*)out)->items[0] = _self;
+		((AlifListObject*)out)->items_[0] = _self;
 		return out;
 	}
 	buf1_ = ALIFUSTR_CAST(_self)->UTF;
@@ -2863,7 +2863,7 @@ static AlifObject* uStr_subscript(AlifObject* _self, AlifObject* _item)
 		if (slice_unpack((AlifSliceObject*)_item, &start_, &stop_, &step_) < 0) {
 			return nullptr;
 		}
-		sliceLength = slice_adjustIndices(ALIFUSTR_CAST(_self)->length_,
+		sliceLength = alifSlice_adjustIndices(ALIFUSTR_CAST(_self)->length_,
 			&start_, &stop_, step_);
 
 		if (sliceLength <= 0) {

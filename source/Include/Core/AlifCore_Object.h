@@ -1,6 +1,10 @@
 #pragma once
 
 
+#include <stdbool.h>
+#include "AlifCore_GC.h"            
+#include "AlifCore_AlifState.h"
+
 #define ALIFSUBOBJECT_HEAD_INIT(_type)       \
     {                                        \
          ALIF_IMMORTAL_REFCENT,    \
@@ -13,6 +17,36 @@
         .size_ = _size                              \
     } \                                              
 
+
+static inline void alifSub_RefcntAdd(AlifObject* _op, int64_t _n)
+{
+	if (alif_isImmortal(_op)) {
+		return;
+	}
+#ifdef ALIF_REF_DEBUG
+	alifSub_AddRefTotal(alifInterpreterState_get(), n);
+#endif
+#if !defined(ALIF_GIL_DISABLED)
+	_op->ref_ += _n;
+#else
+	if (__IsOwnedByCurrentThread(op)) {
+		uint32_t local = op->ob_ref_local;
+		_ssize_t refcnt = (_ssize_t)local + n;
+#  if PY_SSIZE_T_MAX > UINT32_MAX
+		if (refcnt > (_ssize_t)UINT32_MAX) {
+			// Make the object immortal if the 32-bit local reference count
+			// would overflow.
+			refcnt = __IMMORTAL_REFCNT_LOCAL;
+		}
+#  endif
+		__atomic_store_uint32_relaxed(&op->ob_ref_local, (uint32_t)refcnt);
+	}
+	else {
+		__atomic_add_ssize(&op->ob_ref_shared, (n << __REF_SHARED_SHIFT));
+	}
+#endif
+}
+#define ALIFSUB_REFCNTADD(_op, _n) alifSub_RefcntAdd(ALIFSUBOBJECT_CAST(_op), _n)
 
 extern void alifSub_setImmortal(AlifObject*);
 extern void alifSub_setImmortalUntracked(AlifObject*);
@@ -66,6 +100,60 @@ static inline void alifSubObject_initVar(AlifVarObject* _op, AlifTypeObject* _ty
     alifSubObject_init((AlifObject*)_op, _typeObj);
     ALIFSET_SIZE(_op, _size);
 }
+
+static inline void alifSubObjectGC_track(
+#ifndef NDEBUG
+	const char* _filename, int _lineno,
+#endif
+	AlifObject* _op)
+{
+
+#ifdef ALIF_GIL_DISABLED
+	op->ogciBts |= ALIFSUBGC_BITS_TRACKED;
+#else
+	AlifGCHead* gc_ = alifSub_asGC(_op);
+
+	AlifInterpreter* interp_ = alifInterpreter_get();
+	AlifGCHead* generation0_ = &interp_->gc.young.head;
+	AlifGCHead* last_ = (AlifGCHead*)(generation0_->gcPrev);
+	alifSubGCHead_set_next(last_, gc_);
+	alifSubGCHead_set_prev(gc_, last_);
+	gc_->gcNext = ((uintptr_t)generation0_) | interp_->gc.visitedSpace;
+	generation0_->gcPrev = (uintptr_t)gc_;
+#endif
+}
+
+static inline void alifSubObjectGC_unTrack(
+#ifndef NDEBUG
+	const char* _filename, int _lineno,
+#endif
+	AlifObject* op)
+{
+
+#ifdef ALIF_GIL_DISABLED
+	op->ogciBts |= ALIFSUBGC_BITS_TRACKED;
+#else
+	AlifGCHead* gc_ = alifSub_asGC(op);
+	AlifGCHead* prev_ = alifSubGCHead_prev(gc_);
+	AlifGCHead* next_ = alifSubGCHead_next(gc_);
+	alifSubGCHead_set_next(prev_, next_);
+	alifSubGCHead_set_prev(next_, prev_);
+	gc_->gcNext = 0;
+	gc_->gcPrev &= ALIFSUBGC_PREV_MASK_FINALIZED;
+#endif
+}
+
+#ifdef NDEBUG
+#  define ALIFSUBOBJECT_GC_TRACK(op) \
+        alifSubObjectGC_track(ALIFSUBOBJECT_CAST(op))
+#  define ALIFSUBOBJECT_GC_UNTRACK(op) \
+        alifSubObjectGC_unTrack(ALIFSUBOBJECT_CAST(op))
+#else
+#  define ALIFSUBOBJECT_GC_TRACK(op) \
+        alifSubObjectGC_track(__FILE__, __LINE__, ALIFSUBOBJECT_CAST(op))
+#  define ALIFSUBOBJECT_GC_UNTRACK(op) \
+        alifSubObjectGC_unTrack(__FILE__, __LINE__, ALIFSUBOBJECT_CAST(op))
+#endif
 
 
 void alifObjectGC_link(AlifObject*); // 642

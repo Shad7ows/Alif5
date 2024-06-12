@@ -394,7 +394,7 @@ static AlifObject* dict_get(AlifDictObject* self, AlifObject* const* args, int64
     AlifObject* key;
     AlifObject* default_value = ALIF_NONE;
 
-    if (!_alifArg_checkPositional(L"get", nargs, 1, 2)) {
+    if (!alifSubArg_checkPositional(L"get", nargs, 1, 2)) {
         goto exit;
     }
     key = args[0];
@@ -437,7 +437,7 @@ static AlifObject* dict_pop(AlifDictObject* self, AlifObject* const* args, int64
     AlifObject* key;
     AlifObject* default_value = NULL;
 
-    if (!_alifArg_checkPositional(L"pop", nargs, 1, 2)) {
+    if (!alifSubArg_checkPositional(L"pop", nargs, 1, 2)) {
         goto exit;
     }
     key = args[0];
@@ -612,7 +612,7 @@ again:
 	int64_t j_ = 0, pos_ = 0;
 	AlifObject* key_;
 	while (alifDict_next((AlifObject*)mp_, &pos_, &key_, nullptr, nullptr)) {
-		((AlifListObject*)v_)->items[j_] = ALIF_NEWREF(key_);
+		((AlifListObject*)v_)->items_[j_] = ALIF_NEWREF(key_);
 		j_++;
 	}
 	return v_;

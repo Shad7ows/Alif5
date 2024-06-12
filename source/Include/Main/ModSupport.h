@@ -1,9 +1,9 @@
 #pragma once
 
-int _alifArg_checkPositional(const wchar_t*, int64_t, int64_t, int64_t);
+int alifSubArg_checkPositional(const wchar_t*, int64_t, int64_t, int64_t);
 
 #define ALIFARG_CHECKPOSITIONAL(funcname, nargs, min, max) \
-    ((!_Py_ANY_VARARGS(max) && (min) <= (nargs) && (nargs) <= (max)) or _alifArg_checkPositional((funcname), (nargs), (min), (max)))
+    ((!_Py_ANY_VARARGS(max) && (min) <= (nargs) && (nargs) <= (max)) or alifSubArg_checkPositional((funcname), (nargs), (min), (max)))
 
 
 class AlifArgParser {

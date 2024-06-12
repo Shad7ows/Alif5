@@ -286,7 +286,7 @@ AlifObject* alifSequence_fast(AlifObject* v, const wchar_t* m)
         //return null_error();
     //}
 
-    if ((v->type_ == &typeList) || (v->type_ == & typeTuple)) {
+    if ((v->type_ == &_alifListType_) || (v->type_ == & typeTuple)) {
         return v;
     }
 

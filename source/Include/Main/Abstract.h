@@ -19,7 +19,7 @@ int alifSequence_check(AlifObject* );
 
 #define ALIFSEQUENCE_FAST_GETSIZE(o) (((AlifVarObject*)(o))->size_ ? ((AlifVarObject*)(o))->size_ : ((AlifVarObject*)(o))->size_)
 
-#define ALIFSEQUENCE_FAST_ITEMS(sf) ((((AlifObject*)(sf))->type_ == &typeList) ? ((AlifListObject *)(sf))->items : ((AlifTupleObject *)(sf))->items)
+#define ALIFSEQUENCE_FAST_ITEMS(sf) ((((AlifObject*)(sf))->type_ == &_alifListType_) ? ((AlifListObject *)(sf))->items : ((AlifTupleObject *)(sf))->items)
 
 static inline int64_t alifSubVectorcall_NArgs(size_t _n)
 {
