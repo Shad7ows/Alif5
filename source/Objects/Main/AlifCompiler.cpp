@@ -18,6 +18,10 @@
 class AlifCompiler; // temp
 static AlifCodeObject* compiler_module(AlifCompiler*, Module*);
 static AlifIntT compiler_body(AlifCompiler*, SourceLocation, StmtSeq*);
+static AlifSizeT dict_addObject(AlifObject*, AlifObject*);
+static AlifIntT codeGen_addOpI(InstructionSequence*, AlifIntT, AlifSizeT, SourceLocation);
+static AlifCodeObject* optimize_andAssemble(AlifCompiler*, AlifIntT);
+
 
 typedef AlifFlowGraph AlifFlowGraph;
 
@@ -548,7 +552,7 @@ static AlifCodeObject* compiler_module(AlifCompiler* _compiler, Module* _module)
 	codeObject = optimize_andAssemble(_compiler, addNone);
 
 done:
-	compiler_exitScope(_compiler);
+	//compiler_exitScope(_compiler);
 	return codeObject;
 }
 
@@ -666,7 +670,7 @@ static AlifObject* constsDict_keysInorder(AlifObject* _dict) { // 7515
 
 	while (alifDict_next(_dict, &pos, &k, &v, 0)) {
 		i = alifInteger_asLong(v);
-		if (ALIFTUPLE_CHECK(k)) {
+		if (ALIFTUPLE_CHECKEXACT(k)) {
 			k = ALIFTUPLE_GET_ITEM(k, 1);
 		}
 		ALIFLIST_SET_ITEM(consts, i, ALIF_NEWREF(k));
