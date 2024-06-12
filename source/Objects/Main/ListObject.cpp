@@ -1682,7 +1682,7 @@ static AlifObject* list_sort_impl(AlifListObject* _self, AlifObject* _keyFunc, i
 		lo_.values_ = savedObItem;
 	}
 	if (savedObSize > 1) {
-		int keysAreInTuples = (ALIF_IS_TYPE(lo_.keys_[0], &typeTuple) &&
+		int keysAreInTuples = (ALIF_IS_TYPE(lo_.keys_[0], &_alifTupleType_) &&
 			((AlifVarObject*)lo_.keys_[0])->size_ > 0);
 
 		AlifTypeObject* keyType = (keysAreInTuples ?
@@ -1695,7 +1695,7 @@ static AlifObject* list_sort_impl(AlifListObject* _self, AlifObject* _keyFunc, i
 		for (i_ = 0; i_ < savedObSize; i_++) {
 
 			if (keysAreInTuples &&
-				!(ALIF_IS_TYPE(lo_.keys_[i_], &typeTuple) && ((AlifVarObject*)lo_.keys_[i_])->size_ != 0)) {
+				!(ALIF_IS_TYPE(lo_.keys_[i_], &_alifTupleType_) && ((AlifVarObject*)lo_.keys_[i_])->size_ != 0)) {
 				keysAreInTuples = 0;
 				keysAreAllSameType = 0;
 				break;
@@ -1740,7 +1740,7 @@ static AlifObject* list_sort_impl(AlifListObject* _self, AlifObject* _keyFunc, i
 		}
 
 		if (keysAreInTuples) {
-			if (keyType == &typeTuple) {
+			if (keyType == &_alifTupleType_) {
 				ms_.TupleElemCompare = safe_object_compare;
 			}
 			else {
@@ -1844,8 +1844,8 @@ int alifList_sort(AlifObject* _v)
 	return 0;
 }
 
-AlifObject* alifList_asTuple(AlifObject* _v)
-{
+AlifObject* alifList_asTuple(AlifObject* _v) {
+  
 	if (_v == nullptr || !(_v->type_ == &_alifListType_)) {
 		//Err_BadInternalCall();
 		return nullptr;
