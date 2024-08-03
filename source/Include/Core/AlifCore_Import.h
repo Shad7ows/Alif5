@@ -81,6 +81,9 @@ static inline AlifHashTableEntryT* alifHashTable_getEntry(AlifHashTableT* ht, co
 	return ht->getEntryFunc(ht, key);
 }
 
+int alifImport_fixupBuiltin(AlifThread* , AlifObject* , const wchar_t* ,
+	AlifObject* );
+
 class ImportDureRun {
 public:
 	class InitTable* initTable;
@@ -147,3 +150,16 @@ AlifObject* alifImport_getModules(AlifInterpreter* );
 
 
 extern AlifIntT alifImport_init();
+
+class ModuleAlias {
+public:
+	const wchar_t* name;                 /* ASCII encoded string */
+	const wchar_t* orig;                 /* ASCII encoded string */
+};
+
+extern const class Frozen* _alifImportFrozenBootstrap_;
+extern const class Frozen* _alifImportFrozenStdlib_;
+extern const class Frozen* _alifImportFrozenTest_;
+
+extern const class ModuleAlias* _alifImportFrozenAliases_;
+

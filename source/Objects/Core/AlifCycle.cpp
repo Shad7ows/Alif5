@@ -148,9 +148,9 @@ static AlifIntT alifCore_builtinsInit(AlifThread* _thread) {
 
 
 	modules = alifImport_getModules(interp);
-	//if (alifImport_fixupBuiltin(_thread, biMod, "builtins", modules) < 0) {
-		//goto error;
-	//}
+	if (alifImport_fixupBuiltin(_thread, biMod, L"builtins", modules) < 0) {
+		goto error;
+	}
 
 	builtinsDict = alifModule_getDict(biMod);
 	if (builtinsDict == nullptr) goto error;
@@ -192,7 +192,7 @@ static AlifIntT alifCore_interpreterInit(AlifThread* _thread) {
 	if (status < 0) goto done;
 
 done:
-	//Py_XDECREF(sysmod);
+	ALIF_XDECREF(sysMod);
 	return status;
 
 }

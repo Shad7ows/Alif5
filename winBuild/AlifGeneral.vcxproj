@@ -112,6 +112,7 @@
     <ClCompile Include="..\source\Objects\Main\FileTokenizer.cpp" />
     <ClCompile Include="..\source\Objects\Main\FloatObject.cpp" />
     <ClCompile Include="..\source\Objects\Main\FrameObject.cpp" />
+    <ClCompile Include="..\source\Objects\Main\Freeze_Module.cpp" />
     <ClCompile Include="..\source\Objects\Main\FunctionObject.cpp" />
     <ClCompile Include="..\source\Objects\Main\GC.cpp" />
     <ClCompile Include="..\source\Objects\Main\GenericAliasObject.cpp" />
@@ -124,6 +125,7 @@
     <ClCompile Include="..\source\Objects\Main\IterObject.cpp" />
     <ClCompile Include="..\source\Objects\Main\ListObject.cpp" />
     <ClCompile Include="..\source\Objects\Main\lock.cpp" />
+    <ClCompile Include="..\source\Objects\Main\marshal.cpp" />
     <ClCompile Include="..\source\Objects\Main\MethodObject.cpp" />
     <ClCompile Include="..\source\Objects\Main\ModuleObject.cpp" />
     <ClCompile Include="..\source\Objects\Main\SetObject.cpp" />
