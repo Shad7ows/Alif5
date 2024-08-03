@@ -60,6 +60,7 @@
     <ClInclude Include="..\source\Include\Main\IntegerObject.h" />
     <ClInclude Include="..\source\Include\Main\IterObject.h" />
     <ClInclude Include="..\source\Include\Main\ListObject.h" />
+    <ClInclude Include="..\source\Include\Main\lock.h" />
     <ClInclude Include="..\source\Include\Main\MethodObject.h" />
     <ClInclude Include="..\source\Include\Main\ModSupport.h" />
     <ClInclude Include="..\source\Include\Main\ModuleObject.h" />
@@ -122,6 +123,7 @@
     <ClCompile Include="..\source\Objects\Main\IntegerObject.cpp" />
     <ClCompile Include="..\source\Objects\Main\IterObject.cpp" />
     <ClCompile Include="..\source\Objects\Main\ListObject.cpp" />
+    <ClCompile Include="..\source\Objects\Main\lock.cpp" />
     <ClCompile Include="..\source\Objects\Main\MethodObject.cpp" />
     <ClCompile Include="..\source\Objects\Main\ModuleObject.cpp" />
     <ClCompile Include="..\source\Objects\Main\SetObject.cpp" />
@@ -162,7 +164,7 @@
     <UseDebugLibraries>true</UseDebugLibraries>
     <PlatformToolset>v143</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
-    <EnableASAN>true</EnableASAN>
+    <EnableASAN>false</EnableASAN>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
     <ConfigurationType>StaticLibrary</ConfigurationType>

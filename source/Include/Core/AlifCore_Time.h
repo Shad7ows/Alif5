@@ -15,3 +15,20 @@ enum AlifSubTimeRoundT {
 int alifSubTime_fromSecondsObject(AlifTimeT* , AlifObject*, AlifSubTimeRoundT);
 
 AlifTimeT alifSubTime_asMicroseconds(AlifTimeT , AlifSubTimeRoundT );
+
+AlifTimeT alifSubTime_add(AlifTimeT, AlifTimeT );
+
+class AlifClockInfoT {
+public:
+	const wchar_t* implementation;
+	int monotonic;
+	int adjustable;
+	double resolution;
+} ;
+
+
+class AlifTimeFraction{
+public:
+	AlifTimeT numer;
+	AlifTimeT denom;
+} ;

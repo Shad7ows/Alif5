@@ -145,9 +145,11 @@ static AlifIntT alifCore_builtinsInit(AlifThread* _thread) {
 	AlifObject* biMod = alifBuiltin_init(interp);
 	if (biMod == nullptr) goto error;
 
-	//modules = interp->imports.modules_; // alifImport_getModule
+
+
+	modules = alifImport_getModules(interp);
 	//if (alifImport_fixupBuiltin(_thread, biMod, "builtins", modules) < 0) {
-	//	goto error;
+		//goto error;
 	//}
 
 	builtinsDict = alifModule_getDict(biMod);

@@ -52,6 +52,7 @@ AlifObject* alifModule_newObject(AlifObject*);
 AlifObject* alifNew_module(const wchar_t* );
 
 AlifObject* alifModule_getDict(AlifObject*);
+AlifModuleDef* alifModule_getDef(AlifObject*);
 
 
 AlifObject* alifModuleDef_init(AlifModuleDef*);
