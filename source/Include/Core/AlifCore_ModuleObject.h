@@ -25,6 +25,11 @@ AlifObject* alifModule_getAttroImpl(AlifModuleObject*, AlifObject*, AlifIntT);
 AlifObject* alifModule_getAttro(AlifModuleObject*, AlifObject*); 
 
 
+static inline AlifModuleDef* alifSubModule_getDef(AlifObject* _mod) {
+	return ((AlifModuleObject*)_mod)->def;
+}
+
+
 static inline AlifObject* alifSubModule_getDict(AlifObject* _mod) {
 	AlifObject* dict_ = ((AlifModuleObject*)_mod)->dict;
 	return dict_;  // borrowed reference

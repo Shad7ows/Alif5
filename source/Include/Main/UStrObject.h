@@ -6,6 +6,8 @@ using AlifUCS1 = uint8_t;
 
 AlifObject* alifUStr_decodeUTF8(const wchar_t*, int64_t, const wchar_t*);
 
+const wchar_t* alifUStr_asUTF8AndSize( AlifObject* , int64_t* );
+
 AlifObject* alifUStr_fromString(const wchar_t*);
 
 AlifObject* alifUStr_internFromString(const wchar_t*);

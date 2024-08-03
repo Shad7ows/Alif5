@@ -20,6 +20,7 @@
 #include "AlifTypeDefs.h"
 #include "FileManip.h"
 #include "AlifBuffer.h"
+#include "lock.h"
 #include "AlifObject.h"
 #include "ObjImpl.h"
 #include "IntegerObject.h"

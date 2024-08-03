@@ -387,6 +387,14 @@ AlifObject* alifModule_getDict(AlifObject* _m)
 	return alifSubModule_getDict(_m);  // borrowed reference
 }
 
+AlifModuleDef* alifModule_getDef(AlifObject* _m)
+{
+	if (!ALIFMODULE_CHECK(_m)) {
+		return NULL;
+	}
+	return alifSubModule_getDef(_m);
+}
+
 AlifTypeObject _alifModuleType_ = {
 	ALIFVAROBJECT_HEAD_INIT(&_alifTypeType_, 0)
 	L"module",                                 

@@ -179,6 +179,9 @@
     <ClInclude Include="..\source\Include\Main\Find.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="..\source\Include\Main\lock.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\source\Objects\Main\GetVersion.cpp">
@@ -344,6 +347,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\source\Objects\Main\ClassObject.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\source\Objects\Main\lock.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
