@@ -1,4 +1,4 @@
 #pragma once
 
 
-wchar_t* alifUniversal_newLineFGetsWithSize(wchar_t*, int, FILE*, AlifSizeT*);
+char* alifUniversal_newLineFGetsWithSize(char*, AlifIntT, FILE*, AlifSizeT*);

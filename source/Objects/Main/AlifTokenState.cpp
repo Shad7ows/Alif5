@@ -34,7 +34,6 @@ TokenInfo* alifTokenizer_newTokenInfo() {
 	tokInfo->alterIndStack[0] = 0;
 	tokInfo->countLine = 0;
 	tokInfo->fn = nullptr;
-	//tokInfo->comment = 0;
 	tokInfo->underflow = nullptr;
 	tokInfo->string = nullptr;
 	tokInfo->tokExtraTokens = 0;
@@ -46,7 +45,7 @@ TokenInfo* alifTokenizer_newTokenInfo() {
 	return tokInfo;
 }
 
-int alifLexer_setupToken(TokenInfo* _tokInfo, AlifToken* _token, int _type, const wchar_t* _pStart, const wchar_t* _pEnd) {
+AlifIntT alifLexer_setupToken(TokenInfo* _tokInfo, AlifToken* _token, AlifIntT _type, const char* _pStart, const char* _pEnd) {
 	_token->level = _tokInfo->level;
 	if (ISSTRINGLITT(_type)) {
 		_token->lineNo = _tokInfo->firstLineNo;

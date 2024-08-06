@@ -12,12 +12,12 @@
 
 
 
-static int tokInfo_readlineRaw(TokenInfo* _tokInfo) {
+static AlifIntT tokInfo_readlineRaw(TokenInfo* _tokInfo) {
 	do {
-		int nChars = (int)(_tokInfo->end - _tokInfo->inp);
+		AlifIntT nChars = (AlifIntT)(_tokInfo->end - _tokInfo->inp);
 		AlifSizeT lineSize{};
 
-		wchar_t* line = alifUniversal_newLineFGetsWithSize(_tokInfo->inp, nChars, _tokInfo->fp, &lineSize);
+		char* line = alifUniversal_newLineFGetsWithSize(_tokInfo->inp, nChars, _tokInfo->fp, &lineSize);
 		if (line == nullptr) {
 			return 1;
 		}
@@ -31,7 +31,7 @@ static int tokInfo_readlineRaw(TokenInfo* _tokInfo) {
 	return 1;
 }
 
-static int tokInfo_underflowFile(TokenInfo* _tokInfo) {
+static AlifIntT tokInfo_underflowFile(TokenInfo* _tokInfo) {
 	if (_tokInfo->start == nullptr and !INSIDE_FSTRING(_tokInfo)) {
 		_tokInfo->cur = _tokInfo->inp = _tokInfo->buf;
 	}
@@ -48,13 +48,13 @@ static int tokInfo_underflowFile(TokenInfo* _tokInfo) {
 	//}
 
 	if (_tokInfo->inp == _tokInfo->cur) {
-		_tokInfo->done = E_WEOF;
+		_tokInfo->done = E_EOF;
 		return 0;
 	}
 	_tokInfo->implicitNewline = 0;
-	if (_tokInfo->inp[-1] != L'\n') {
-		*_tokInfo->inp++ = L'\n';
-		*_tokInfo->inp = L'\0';
+	if (_tokInfo->inp[-1] != '\n') {
+		*_tokInfo->inp++ = '\n';
+		*_tokInfo->inp = '\0';
 		_tokInfo->implicitNewline = 1;
 	}
 
@@ -67,7 +67,7 @@ TokenInfo* alifTokenizerInfo_fromFile(FILE* _fp) {
 	TokenInfo* tokInfo = alifTokenizer_newTokenInfo();
 	if (tokInfo == nullptr) return nullptr;
 
-	tokInfo->buf = (wchar_t*)alifMem_dataAlloc(BUFSIZ * sizeof(wchar_t));
+	tokInfo->buf = (char*)alifMem_dataAlloc(BUFSIZ);
 	if (tokInfo->buf == nullptr) {
 		// free tokInfo
 		return nullptr;

@@ -5,4 +5,4 @@
 #include "AlifParserEngine.h"
 
 AlifObject* alifParserEngine_parseString(AlifParser*, AlifPToken*);
-AlifObject* alifParserEngine_decodeString(AlifParser*, int, const wchar_t*, size_t, AlifPToken*);
+AlifObject* alifParserEngine_decodeString(AlifParser*, AlifIntT, const char*, AlifSizeT, AlifPToken*);

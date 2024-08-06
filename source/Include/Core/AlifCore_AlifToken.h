@@ -65,6 +65,6 @@
 
 
 
-int alifToken_oneChar(int);
-int alifToken_twoChars(int, int);
-int alifToken_threeChars(int, int, int);
+AlifIntT alifToken_oneChar(AlifIntT);
+AlifIntT alifToken_twoChars(AlifIntT, AlifIntT);
+AlifIntT alifToken_threeChars(AlifIntT, AlifIntT, AlifIntT);

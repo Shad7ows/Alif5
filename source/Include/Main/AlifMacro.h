@@ -4,7 +4,7 @@
 #define ALIF_MAX(a,b)	(((a) > (b)) ? (a) : (b))
 #define ALIF_MIN(a,b)   (((a) < (b)) ? (a) : (b))
 
-#define ALIF_WCHARMASK(wc) ((wchar_t)((wc) & 0xffff)) 
+#define ALIF_CHARMASK(_ch) ((unsigned char)((_ch) & 0xff)) 
 
 #define ALIFSIZE_ROUND_UP(_n, _a) (((size_t)(_n) + (size_t)((_a) - 1)) & ~(size_t)((_a) - 1))
 

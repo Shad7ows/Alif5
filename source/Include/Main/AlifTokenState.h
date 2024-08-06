@@ -11,9 +11,9 @@
 
 class AlifToken { // token
 public:
-	int level{};
-	int lineNo{}, colOffset{}, endLineNo{}, endColOffset{};
-	const wchar_t* start{}, * end{};
+	AlifIntT level{};
+	AlifIntT lineNo{}, colOffset{}, endLineNo{}, endColOffset{};
+	const char* start{}, * end{};
 	AlifObject* data{};
 };
 
@@ -28,68 +28,68 @@ class TokenizerMode {
 public:
 	TokenizerModeType type{};
 
-	int curlyBracDepth{};
-	int curlyBracExprStartDepth{};
+	AlifIntT curlyBracDepth{};
+	AlifIntT curlyBracExprStartDepth{};
 
 	char fStringQuote{};
-	int fStringQuoteSize{};
-	int fStringRaw{};
+	AlifIntT fStringQuoteSize{};
+	AlifIntT fStringRaw{};
 
-	const wchar_t* fStringStart{};
-	const wchar_t* fStringMultiLineStart{};
-	int fStringLineStart{};
+	const char* fStringStart{};
+	const char* fStringMultiLineStart{};
+	AlifIntT fStringLineStart{};
 
 	AlifSizeT fStringStartOffset{};
 	AlifSizeT fStringMultiLineStartOffset{};
 
 	AlifSizeT lastExprSize{};
 	AlifSizeT lastExprEnd{};
-	wchar_t* lastExprBuff{};
+	char* lastExprBuff{};
 };
 
 class TokenInfo {
 public:
-	wchar_t* buf{}, * cur{}, * inp{};
-	const wchar_t* start{}, * end{};
-	int done{};
+	char* buf{}, * cur{}, * inp{};
+	const char* start{}, * end{};
+	AlifIntT done{};
 	FILE* fp{};
-	int tabSize{};
-	int indent{};
-	int indStack[MAXINDENT]{};
-	int atBeginOfLine{ 1 };
-	int pendInd{};
-	const wchar_t* prompt{}, * nextPrompt{};
-	int lineNo{};
-	int firstLineNo{};
-	int startingColOffset{ -1 };
-	int colOffset{ -1 };
-	int level{};
-	wchar_t parenStack[MAXLEVEL]{};
-	int parenLineNoStack[MAXLEVEL]{};
-	int parenColStack[MAXLEVEL]{};
+	AlifIntT tabSize{};
+	AlifIntT indent{};
+	AlifIntT indStack[MAXINDENT]{};
+	AlifIntT atBeginOfLine{ 1 };
+	AlifIntT pendInd{};
+	const char* prompt{}, * nextPrompt{};
+	AlifIntT lineNo{};
+	AlifIntT firstLineNo{};
+	AlifIntT startingColOffset{ -1 };
+	AlifIntT colOffset{ -1 };
+	AlifIntT level{};
+	char parenStack[MAXLEVEL]{};
+	AlifIntT parenLineNoStack[MAXLEVEL]{};
+	AlifIntT parenColStack[MAXLEVEL]{};
 	AlifObject* fn;
 
-	int alterIndStack[MAXINDENT]{};
+	AlifIntT alterIndStack[MAXINDENT]{};
 
-	int countLine{};
-	const wchar_t* lineStart{};
-	const wchar_t* multiLineStart{};
+	AlifIntT countLine{};
+	const char* lineStart{};
+	const char* multiLineStart{};
 
-	wchar_t* string;
-	wchar_t* input;
+	char* string;
+	char* input;
 
-	int comment{};
+	AlifIntT comment{};
 
-	int (*underflow) (TokenInfo*);
+	AlifIntT (*underflow) (TokenInfo*);
 
 	TokenizerMode tokModeStack[MAXFSTRING_LEVEL]{};
-	int tokModeStackIndex{};
-	int tokExtraTokens{};
-	int commentNewline{};
-	int implicitNewline{};
+	AlifIntT tokModeStackIndex{};
+	AlifIntT tokExtraTokens{};
+	AlifIntT commentNewline{};
+	AlifIntT implicitNewline{};
 };
 
 
 
 TokenInfo* alifTokenizer_newTokenInfo();
-int alifLexer_setupToken(TokenInfo*, AlifToken*, int, const wchar_t*, const wchar_t*);
+AlifIntT alifLexer_setupToken(TokenInfo*, AlifToken*, AlifIntT, const char*, const char*);

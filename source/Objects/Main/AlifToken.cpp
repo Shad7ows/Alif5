@@ -7,159 +7,159 @@
 
 /* Token names */
 
-const wchar_t* const alifParserTokenNames[] = {
-	L"ENDMARKER",
-	L"NAME",
-	L"NUMBER",
-	L"STRING",
-	L"NEWLINE",
-	L"INDENT",
-	L"DEDENT",
-	L"LPAR",
-	L"RPAR",
-	L"LSQB",
-	L"RSQB",
-	L"COLON",
-	L"COMMA",
-	L"PLUS",
-	L"MINUS",
-	L"STAR",
-	L"DOT",
-	L"SQRT",
-	L"EQUAL",
-	L"AMPER",
-	L"LEFTSHIFTEQUAL",
-	L"RIGHTSHIFTEQUAL",
-	L"DOUBLECIRCUMFLEXEQUAL",
-	L"VBAREQUAL",
-	L"AMPEREQUAL",
-	L"DOUBLESLASHEQUAL",
-	L"SLASHSTAREQUAL",
-	L"SLASHEQUAL",
-	L"STAREQUAL",
-	L"MINEQUAL",
-	L"PLUSEQUAL",
-	L"DOUBLESTAR",
-	L"EQEQUAL",
-	L"NOTEQUAL",
-	L"LESSEQUAL",
-	L"LESS",
-	L"GREATEREQUAL",
-	L"GREATER",
-	L"VBAR",
-	L"STARVBAR",
-	L"RIGHTSHIFT",
-	L"LEFTSHIFT",
-	L"DOUBLESLASH",
-	L"SLASH",
-	L"SLASHSTAR",
-	L"CIRCUMFLEX",
-	L"SLASHCIRCUMFLEX",
-	L"LBRACE",
-	L"RBRACE",
-	L"EXCLAMATION",
-	L"OP",
-	L"COMMENT",
-	L"FSTRING_START",
-	L"FSTRING_MIDDLE",
-	L"FSTRING_END",
-	L"NL",
-	L"<ERRORTOKEN>",
+const char* const alifParserTokenNames[] = {
+	"ENDMARKER",
+	"NAME",
+	"NUMBER",
+	"STRING",
+	"NEWLINE",
+	"INDENT",
+	"DEDENT",
+	"LPAR",
+	"RPAR",
+	"LSQB",
+	"RSQB",
+	"COLON",
+	"COMMA",
+	"PLUS",
+	"MINUS",
+	"STAR",
+	"DOT",
+	"SQRT",
+	"EQUAL",
+	"AMPER",
+	"LEFTSHIFTEQUAL",
+	"RIGHTSHIFTEQUAL",
+	"DOUBLECIRCUMFLEXEQUAL",
+	"VBAREQUAL",
+	"AMPEREQUAL",
+	"DOUBLESLASHEQUAL",
+	"SLASHSTAREQUAL",
+	"SLASHEQUAL",
+	"STAREQUAL",
+	"MINEQUAL",
+	"PLUSEQUAL",
+	"DOUBLESTAR",
+	"EQEQUAL",
+	"NOTEQUAL",
+	"LESSEQUAL",
+	"LESS",
+	"GREATEREQUAL",
+	"GREATER",
+	"VBAR",
+	"STARVBAR",
+	"RIGHTSHIFT",
+	"LEFTSHIFT",
+	"DOUBLESLASH",
+	"SLASH",
+	"SLASHSTAR",
+	"CIRCUMFLEX",
+	"SLASHCIRCUMFLEX",
+	"LBRACE",
+	"RBRACE",
+	"EXCLAMATION",
+	"OP",
+	"COMMENT",
+	"FSTRING_START",
+	"FSTRING_MIDDLE",
+	"FSTRING_END",
+	"NL",
+	"<ERRORTOKEN>",
 
-	L"SOFT_KEYWORD",
-	L"<ENCODING>",
-	L"<N_TOKENS>",
+	"SOFT_KEYWORD",
+	"<ENCODING>",
+	"<N_TOKENS>",
 };
 
-int alifToken_oneChar(int _c1) {
+AlifIntT alifToken_oneChar(AlifIntT _c1) {
 
 	switch (_c1) {
-	case L'(': return LPAR;
-	case L')': return RPAR;
-	case L'[': return LSQR;
-	case L']': return RSQR;
-	case L'*': return STAR;
-	case L'+': return PLUS;
-	case L'-': return MINUS;
-	case L'.': return DOT;
-	case L':': return COLON;
-	case L',': return COMMA;
-	case L'&': return AMPER;
-	case L'<': return LESSTHAN;
-	case L'=': return EQUAL;
-	case L'>': return GREATERTHAN;
-	case L'!': return EXCLAMATION;
-	case L'/': return SLASH;
-	case L'^': return CIRCUMFLEX;
-	case L'{': return LBRACE;
-	case L'}': return RBRACE;
-	case L'|': return VBAR;
+	case '(': return LPAR;
+	case ')': return RPAR;
+	case '[': return LSQR;
+	case ']': return RSQR;
+	case '*': return STAR;
+	case '+': return PLUS;
+	case '-': return MINUS;
+	case '.': return DOT;
+	case ':': return COLON;
+	case ',': return COMMA;
+	case '&': return AMPER;
+	case '<': return LESSTHAN;
+	case '=': return EQUAL;
+	case '>': return GREATERTHAN;
+	case '!': return EXCLAMATION;
+	case '/': return SLASH;
+	case '^': return CIRCUMFLEX;
+	case '{': return LBRACE;
+	case '}': return RBRACE;
+	case '|': return VBAR;
 	}
 	return OP;
 }
 
-int alifToken_twoChars(int _c1, int _c2) {
+AlifIntT alifToken_twoChars(AlifIntT _c1, AlifIntT _c2) {
 
 	switch (_c1) {
-	case L'!':
-		if (_c2 == L'=') return NOTEQUAL;
+	case '!':
+		if (_c2 == '=') return NOTEQUAL;
 		break;
-	case L'&':
-		if (_c2 == L'=') return AMPEREQUAL;
+	case '&':
+		if (_c2 == '=') return AMPEREQUAL;
 		break;
-	case L'*':
-		if (_c2 == L'*') return DOUBLESTAR;
-		else if (_c2 == L'=') return STAREQUAL;
-		else if (_c2 == L'|') return STARVBAR;
+	case '*':
+		if (_c2 == '*') return DOUBLESTAR;
+		else if (_c2 == '=') return STAREQUAL;
+		else if (_c2 == '|') return STARVBAR;
 		break;
-	case L'+':
-		if (_c2 == L'=') return PLUSEQUAL;
+	case '+':
+		if (_c2 == '=') return PLUSEQUAL;
 		break;
-	case L'-':
-		if (_c2 == L'=') return MINUSEQUAL;
+	case '-':
+		if (_c2 == '=') return MINUSEQUAL;
 		break;
-	case L'/':
-		if (_c2 == L'/') return DOUBLESLASH;
-		else if (_c2 == L'=') return SLASHEQUAL;
-		else if (_c2 == L'^') return SLASHCIRCUMFLEX;
-		else if (_c2 == L'*') return SLASHSTAR;
+	case '/':
+		if (_c2 == '/') return DOUBLESLASH;
+		else if (_c2 == '=') return SLASHEQUAL;
+		else if (_c2 == '^') return SLASHCIRCUMFLEX;
+		else if (_c2 == '*') return SLASHSTAR;
 		break;
-	case L'<':
-		if (_c2 == L'<') return LSHIFT;
-		else if (_c2 == L'=') return LESSEQUAL;
+	case '<':
+		if (_c2 == '<') return LSHIFT;
+		else if (_c2 == '=') return LESSEQUAL;
 		break;
-	case L'=':
-		if (_c2 == L'=') return EQUALEQUAL;
+	case '=':
+		if (_c2 == '=') return EQUALEQUAL;
 		break;
-	case L'>':
-		if (_c2 == L'=') return GREATEREQUAL;
-		else if (_c2 == L'>') return RSHIFT;
+	case '>':
+		if (_c2 == '=') return GREATEREQUAL;
+		else if (_c2 == '>') return RSHIFT;
 		break;
-	case L'^':
-		if (_c2 == L'=') return CIRCUMFLEXEQUAL;
+	case '^':
+		if (_c2 == '=') return CIRCUMFLEXEQUAL;
 		break;
-	case L'|':
-		if (_c2 == L'=') return VBAREQUAL;
+	case '|':
+		if (_c2 == '=') return VBAREQUAL;
 		break;
 	}
 	return OP;
 }
 
-int alifToken_threeChars(int _c1, int _c2, int _c3) {
+AlifIntT alifToken_threeChars(AlifIntT _c1, AlifIntT _c2, AlifIntT _c3) {
 
 	switch (_c1) {
-	case L'/':
-		if (_c2 == L'/') { if (_c3 == L'=') return DOUBLESLASHEQUAL; }
-		else if (_c2 == L'*') { if (_c3 == L'=') return SLASHSTAREQUAL; }
+	case '/':
+		if (_c2 == '/') { if (_c3 == '=') return DOUBLESLASHEQUAL; }
+		else if (_c2 == '*') { if (_c3 == '=') return SLASHSTAREQUAL; }
 		break;
-	case L'<':
-		if (_c2 == L'<') { if (_c3 == L'=') return LSHIFTEQUAL; }
+	case '<':
+		if (_c2 == '<') { if (_c3 == '=') return LSHIFTEQUAL; }
 		break;
-	case L'>':
-		if (_c2 == L'>') { if (_c3 == L'=') return RSHIFTEQUAL; }
+	case '>':
+		if (_c2 == '>') { if (_c3 == '=') return RSHIFTEQUAL; }
 		break;
-	case L'^':
-		if (_c2 == L'^') { if (_c3 == L'=') return DOUBLECIRCUMFLEXEQUAL; }
+	case '^':
+		if (_c2 == '^') { if (_c3 == '=') return DOUBLECIRCUMFLEXEQUAL; }
 		break;
 	}
 	return OP;

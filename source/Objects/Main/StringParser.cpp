@@ -8,7 +8,7 @@
 #include "StringParser.h"
 
 
-AlifObject* alifParserEngine_decodeString(AlifParser* _p, int _raw, const wchar_t* _s, size_t _len, AlifPToken* _t) {
+AlifObject* alifParserEngine_decodeString(AlifParser* _p, AlifIntT _raw, const char* _s, AlifSizeT _len, AlifPToken* _t) {
 	if (_raw) {
 		return alifUStr_decodeUTF8Stateful(_s, _len, nullptr, nullptr);
 	}
@@ -17,27 +17,27 @@ AlifObject* alifParserEngine_decodeString(AlifParser* _p, int _raw, const wchar_
 }
 
 AlifObject* alifParserEngine_parseString(AlifParser* _p, AlifPToken* _t) {
-	const wchar_t* s = _alifWBytes_asString(_t->bytes);
+	const char* s = _alifWBytes_asString(_t->bytes);
 	if (s == nullptr) return nullptr;
 
 	AlifUSizeT len{};
-	int quote = ALIF_WCHARMASK(*s);
-	int bytesMode{};
-	int rawMode{};
+	AlifIntT quote = ALIF_CHARMASK(*s);
+	AlifIntT bytesMode{};
+	AlifIntT rawMode{};
 
 	//if (ALIF_ISALPHA(quote)) {
 	//	while (!bytesMode or !rawMode) {
-	//		// if L'b' or L'B'
+	//		// if 'b' or 'B'
 	//	}
 	//}
 
-	if (quote != L'\'' and quote != L'\"') {
+	if (quote != '\'' and quote != '\"') {
 		// error
 		return nullptr;
 	}
 	// skip the leading quote wchar_t
 	s++;
-	len = wcslen(s);
+	len = strlen(s);
 	// error
 	// error
 
@@ -47,7 +47,7 @@ AlifObject* alifParserEngine_parseString(AlifParser* _p, AlifPToken* _t) {
 		// error
 	}
 
-	rawMode ? rawMode : rawMode = (wcschr(s, L'\\') == nullptr); // يجب مراجعتها لانه تم التعديل عليها
+	rawMode ? rawMode : rawMode = (strchr(s, '\\') == nullptr); // يجب مراجعتها لانه تم التعديل عليها
 	/*
 	.
 	.

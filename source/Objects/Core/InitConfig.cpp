@@ -9,7 +9,6 @@
 #include "AlifCore_DureRun.h"
 
 #ifdef _WINDOWS
-#include <windows.h>
 #include <fcntl.h>
 #else
 #include <unistd.h>
