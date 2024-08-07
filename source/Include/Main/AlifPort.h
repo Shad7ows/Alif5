@@ -27,3 +27,5 @@
 #      undef HAVE_LOCAL_THREAD
 #    endif
 #endif
+
+#  define ALIFFALLTHROUGH do { } while (0)

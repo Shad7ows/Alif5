@@ -131,8 +131,133 @@ AlifObject* alifObject_vectorCall(AlifObject* callable, AlifObject* const* args,
 	AlifUSizeT nargsf, AlifObject* kwnames)
 {
 	AlifThread* thread = alifThread_get();
-	return alifObject_vectorCallThread(thread, callable,
+	return alifObject_vectorCallTState(thread, callable,
 		args, nargsf, kwnames);
+}
+
+static AlifObject* alifObject_callFunctionVa(AlifThread* tstate, AlifObject* callable,
+	const wchar_t* format, va_list va)
+{
+	AlifObject* small_stack[ALIFFASTCALL_SMALL_STACK];
+	const int64_t small_stack_len = ALIFARRAY_LENGTH(small_stack);
+	AlifObject** stack;
+	int64_t nargs, i;
+	AlifObject* result;
+
+	if (callable == NULL) {
+		return nullptr;
+	}
+
+	if (!format || !*format) {
+		return alifObject_callNoArgsTstate(tstate, callable);
+	}
+
+	stack = alif_vaBuildStack(small_stack, small_stack_len,
+		format, va, &nargs);
+	if (stack == NULL) {
+		return NULL;
+	}
+	if (nargs == 1 && ALIFTUPLE_CHECK(stack[0])) {
+
+		AlifObject* args = stack[0];
+		result = alifObject_vectorCallTState(tstate, callable,
+			ALIFTUPLE_ITEMS(args),
+			ALIFTUPLE_GET_SIZE(args),
+			NULL);
+	}
+	else {
+		result = alifObject_vectorCallTState(tstate, callable,
+			stack, nargs, NULL);
+	}
+
+	for (i = 0; i < nargs; ++i) {
+		ALIF_DECREF(stack[i]);
+	}
+	if (stack != small_stack) {
+		alifMem_objFree(stack);
+	}
+	return result;
+}
+
+
+static AlifObject* callMethod(AlifThread* tstate, AlifObject* callable, const wchar_t* format, va_list va)
+{
+	if (!alifCallable_check(callable)) {
+
+		return NULL;
+	}
+
+	return alifObject_callFunctionVa(tstate, callable, format, va);
+}
+
+AlifObject* alifObject_callMethod(AlifObject* obj, const wchar_t* name, const wchar_t* format, ...) // 630
+{
+	AlifThread* tstate = alifThread_get();
+	if (obj == NULL || name == NULL) {
+		return nullptr;
+	}
+
+	AlifObject* callable = alifObject_getAttrString(obj, name);
+	if (callable == NULL) {
+		return NULL;
+	}
+
+	va_list va;
+	va_start(va, format);
+	AlifObject* retval = callMethod(tstate, callable, format, va);
+	va_end(va);
+
+	ALIF_DECREF(callable);
+	return retval;
+}
+
+AlifObject* alifSubObject_callMethod(AlifObject* obj, AlifObject* name,
+	const wchar_t* format, ...)
+{
+	AlifThread* tstate = alifThread_get();
+	if (obj == NULL || name == NULL) {
+		return nullptr;
+	}
+
+	AlifObject* callable = alifObject_getAttr(obj, name);
+	if (callable == NULL) {
+		return NULL;
+	}
+
+	va_list va;
+	va_start(va, format);
+	AlifObject* retval = callMethod(tstate, callable, format, va);
+	va_end(va);
+
+	ALIF_DECREF(callable);
+	return retval;
+}
+
+AlifObject* alifObject_vectorcallMethod(AlifObject* name, AlifObject* const* args,
+	size_t nargsf, AlifObject* kwnames)
+{
+
+	AlifThread* tstate = alifThread_get();
+	AlifObject* callable = NULL;
+	int unbound = alifObject_getMethod(args[0], name, &callable);
+	if (callable == NULL) {
+		return NULL;
+	}
+
+	if (unbound) {
+
+		nargsf &= ~ALIFVECTORCALL_ARGUMENTS_OFFSET;
+	}
+	else {
+
+		args++;
+		nargsf--;
+	}
+	//EVAL_CALL_STAT_INC_IF_FUNCTION(EVAL_CALL_METHOD, callable); // قد يتم استخدامه فيما بعد
+	AlifObject* result = alifObject_vectorCallTState(tstate, callable,
+		args, nargsf, kwnames);
+	ALIF_DECREF(callable);
+	return result;
 }
 
 AlifObject* alifObject_callOneArg(AlifObject* func, AlifObject* arg) { 
@@ -142,7 +267,7 @@ AlifObject* alifObject_callOneArg(AlifObject* func, AlifObject* arg) {
 	args[0] = arg;
 	AlifThread* thread = alifThread_get();
 	size_t nargsf = 1 | ALIF_VECTORCALL_ARGUMENTS_OFFSET;
-	return alifObject_vectorCallThread(thread, func, args, nargsf, nullptr);
+	return alifObject_vectorCallTState(thread, func, args, nargsf, nullptr);
 }
 
 AlifObject* alifFunction_vectorCall(AlifObject* func, AlifObject* const* stack,
@@ -198,18 +323,18 @@ AlifObject* alifVectorCall_call(AlifObject* callable, AlifObject* tuple, AlifObj
 
     int64_t offset = callable->type_->vectorCallOffset;
     if (offset <= 0) {
-        //_PyErr_Format(tstate, PyExc_TypeError,
+        //_Err_Format(tstate, Exc_TypeError,
         //    "'%.200s' object does not support vectorcall",
-        //    Py_TYPE(callable)->tp_name);
+        //    _TYPE(callable)->tp_name);
         return nullptr;
     }
 
     VectorCallFunc func{};
     memcpy(&func, (char*)callable + offset, sizeof(func));
     if (func == nullptr) {
-        //_PyErr_Format(tstate, PyExc_TypeError,
+        //_Err_Format(tstate, Exc_TypeError,
         //    "'%.200s' object does not support vectorcall",
-        //    Py_TYPE(callable)->tp_name);
+        //    _TYPE(callable)->tp_name);
         return nullptr;
     }
 
@@ -257,9 +382,9 @@ AlifObject* const* alifStack_unpackDict(AlifObject* const* args, int64_t nArgs,
     }
 
     //if (!keys_are_strings) {
-    //    _PyErr_SetString(tstate, PyExc_TypeError,
+    //    _Err_SetString(tstate, Exc_TypeError,
     //        "keywords must be strings");
-    //    _PyStack_UnpackDict_Free(stack, nargs, kwNames);
+    //    _Stack_UnpackDict_Free(stack, nargs, kwNames);
     //    return nullptr;
     //}
 
@@ -271,9 +396,9 @@ void alifStack_unpackDict_free(AlifObject* const* stack, int64_t nArgs,
     AlifObject* kwNames)
 {
     int64_t n = ((AlifTupleObject*)kwNames)->_base_.size_ +nArgs;
-    //for (int64_t i = 0; i < n; i++) {
-    //    ALIF_DECREF(stack[i]);
-    //}
+    for (int64_t i = 0; i < n; i++) {
+        ALIF_DECREF(stack[i]);
+    }
     //alifStack_unpackDict_freeNoDecRef(stack, kwNames);
 }
 

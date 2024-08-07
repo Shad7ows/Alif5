@@ -20,6 +20,8 @@ public:
 	AlifObject* value; 
 } ;
 
+size_t alifDict_keysSize(AlifDictKeysObject* );
+
 //bool alifDict_next(AlifObject* dict, int64_t* posPos, AlifObject** posKey, AlifObject** posValue, size_t* posHash); // issue here
 
 #define DKIX_EMPTY (-1)

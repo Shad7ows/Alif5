@@ -202,7 +202,7 @@ AlifObject* alifObject_getAttrString(AlifObject* _v, const wchar_t* _name)
 	w_ = alifUStr_decodeUTF8Stateful(_name, wcslen(_name), nullptr, nullptr);
 	if (w_ == nullptr)
 		return nullptr;
-	//res_ = alifObject_getAttr(_v, w_);
+	res_ = alifObject_getAttr(_v, w_);
 	ALIF_DECREF(w_);
 	return res_;
 }
@@ -478,6 +478,31 @@ void alifSub_setRefcnt(AlifObject* _ob, int64_t _ref)
 	ALIF_SETREF(_ob, _ref);
 }
 
+AlifObject* alifObject_getAttr(AlifObject* v, AlifObject* name)
+{
+	AlifTypeObject* tp = ALIF_TYPE(v);
+	if (!ALIFUSTR_CHECK(name)) {
+		return NULL;
+	}
+
+	AlifObject* result = NULL;
+	if (tp->getAttro != NULL) {
+		result = (*tp->getAttro)(v, name);
+	}
+	else if (tp->getAttr != NULL) {
+		const wchar_t* name_str = alifUStr_asUTF8(name);
+		if (name_str == NULL) {
+			return NULL;
+		}
+		result = (*tp->getAttr)(v, (wchar_t*)name_str);
+	}
+
+	//if (result == NULL) {
+		//alifObject_SetAttributeErrorContext(v, name);
+	//}
+	return result;
+}
+
 
 AlifIntT alifObject_getOptionalAttr(AlifObject* v, AlifObject* name, AlifObject** result) { 
 	AlifTypeObject* tp = ALIF_TYPE(v);
@@ -607,7 +632,6 @@ AlifIntT alifObject_setAttr(AlifObject* v, AlifObject* name, AlifObject* value) 
 		return err;
 	}
 	ALIF_DECREF(name);
-	//ALIFOBJECT_ASSERT(name, ALIF_REFCNT(name) >= 1);
 	//if (tp->getAttr == nullptr and tp->getAttro == nullptr) {
 	//	alifErr_format(alifExcTypeError,
 	//		"'%.100s' object has no attributes "
@@ -628,6 +652,91 @@ AlifIntT alifObject_setAttr(AlifObject* v, AlifObject* name, AlifObject* value) 
 }
 
 
+int alifObject_getMethod(AlifObject* obj, AlifObject* name, AlifObject** method)
+{
+	int meth_found = 0;
+
+
+	AlifTypeObject* tp = ALIF_TYPE(obj);
+	if (!alifType_isReady(tp)) {
+		if (alifType_ready(tp) < 0) {
+			return 0;
+		}
+	}
+
+	if (tp->getAttro != alifObject_genericGetAttr || !ALIFUSTR_CHECKEXACT(name)) {
+		*method = alifObject_getAttr(obj, name);
+		return 0;
+	}
+
+	AlifObject* descr = alifType_lookupRef(tp, name);
+	DescrGetFunc f = NULL;
+	if (descr != NULL) {
+		if (alifType_hasFeature(ALIF_TYPE(descr), ALIFTPFLAGS_METHOD_DESCRIPTOR)) {
+			meth_found = 1;
+		}
+		else {
+			f = ALIF_TYPE(descr)->descrGet;
+			if (f != NULL && alifDescr_isData(descr)) {
+				*method = f(descr, obj, (AlifObject*)ALIF_TYPE(obj));
+				ALIF_DECREF(descr);
+				return 0;
+			}
+		}
+	}
+	AlifObject* dict, * attr;
+	//if ((tp->flags_ & ALIFTPFLAGS_INLINE_VALUES) &&
+	//	alifObject_TryGetInstanceAttribute(obj, name, &attr)) {
+	//	if (attr != NULL) {
+	//		*method = attr;
+	//		ALIF_XDECREF(descr);
+	//		return 0;
+	//	}
+	//	dict = NULL;
+	//}
+	 if ((tp->flags_ & ALIFTPFLAGS_MANAGED_DICT)) {
+		dict = (AlifObject*)alifObject_getManagedDict(obj);
+	}
+	else {
+		AlifObject** dictptr = alifObject_computedDictPointer(obj);
+		if (dictptr != NULL) {
+			dict = *dictptr;
+		}
+		else {
+			dict = NULL;
+		}
+	}
+	if (dict != NULL) {
+		ALIF_INCREF(dict);
+		if (alifDict_getItemRef(dict, name, method) != 0) {
+			// found or error
+			ALIF_DECREF(dict);
+			ALIF_XDECREF(descr);
+			return 0;
+		}
+		// not found
+		ALIF_DECREF(dict);
+	}
+
+	if (meth_found) {
+		*method = descr;
+		return 1;
+	}
+
+	if (f != NULL) {
+		*method = f(descr, obj, (AlifObject*)ALIF_TYPE(obj));
+		ALIF_DECREF(descr);
+		return 0;
+	}
+
+	if (descr != NULL) {
+		*method = descr;
+		return 0;
+	}
+
+	//alifObject_SetAttributeErrorContext(obj, name);
+	return 0;
+}
 
 AlifObject* alifSubObject_genericGetAttrWithDict(AlifObject* obj, AlifObject* name,
 	AlifObject* dict, AlifIntT suppress) { 

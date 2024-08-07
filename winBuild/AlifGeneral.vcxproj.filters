@@ -182,6 +182,12 @@
     <ClInclude Include="..\source\Include\Main\lock.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="..\source\Include\Main\Marshal.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\source\Include\Core\AlifCore_Namespace.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\source\Objects\Main\GetVersion.cpp">
@@ -356,6 +362,15 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\source\Objects\Main\marshal.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\source\Objects\Main\MemoryObject.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\source\Objects\Main\ModSupport.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\source\Objects\Main\NamespaceObject.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

@@ -245,6 +245,71 @@ static void update_cache(class TypeCacheEntry* _entry, AlifObject* _name, unsign
 	ALIF_SETREF(_entry->name_, ALIF_NEWREF(_name));
 }
 
+AlifObject* alifType_lookupRef(AlifTypeObject* type, AlifObject* name)
+{
+	AlifObject* res;
+	int error;
+	AlifInterpreter* interp = alifInterpreter_get();
+
+	unsigned int h = MCACHE_HASH_METHOD(type, name);
+	class TypeCache* cache = get_type_cache();
+	struct TypeCacheEntry* entry = &cache->hashtable[h];
+//#ifdef ALIF_GIL_DISABLED
+//	// synchronize-with other writing threads by doing an acquire load on the sequence
+//	while (1) {
+//		uint32_t sequence = SeqLock_BeginRead(&entry->sequence);
+//		uint32_t entry_version = _atomic_load_uint32_relaxed(&entry->version);
+//		uint32_t type_version = _atomic_load_uint32_acquire(&type->tp_version_tag);
+//		if (entry_version == type_version &&
+//			_atomic_load_ptr_relaxed(&entry->name) == name) {
+//			OBJECT_STAT_INC_COND(type_cache_hits, !is_dunder_name(name));
+//			OBJECT_STAT_INC_COND(type_cache_dunder_hits, is_dunder_name(name));
+//			Object* value = _atomic_load_ptr_relaxed(&entry->value);
+//			// If the sequence is still valid then we're done
+//			if (value == NULL || _TryIncref(value)) {
+//				if (SeqLock_EndRead(&entry->sequence, sequence)) {
+//					return value;
+//				}
+//				ALIF_XDECREF(value);
+//			}
+//			else {
+//				// If we can't incref the object we need to fallback to locking
+//				break;
+//			}
+//		}
+//		else {
+//			// cache miss
+//			break;
+//		}
+//	}
+//#else
+//	if (entry->version == type->tp_version_tag &&
+//		entry->name == name) {
+//		assert(type->tp_version_tag);
+//		OBJECT_STAT_INC_COND(type_cache_hits, !is_dunder_name(name));
+//		OBJECT_STAT_INC_COND(type_cache_dunder_hits, is_dunder_name(name));
+//		ALIF_XINCREF(entry->value);
+//		return entry->value;
+//	}
+//#endif
+	//OBJECT_STAT_INC_COND(type_cache_misses, !is_dunder_name(name));
+	//OBJECT_STAT_INC_COND(type_cache_dunder_misses, is_dunder_name(name));
+
+
+	int has_version = 0;
+	int version = 0;
+	//BEGIN_TYPE_LOCK();
+	res = findName_inMro(type, name, &error);
+	if (MCACHE_CACHEABLE_NAME(name)) {
+		has_version = assign_version_tag(interp, type);
+		version = type->versionTag;
+	}
+	//END_TYPE_LOCK();
+
+
+	return res;
+}
+
 AlifObject* alifType_lookup(AlifTypeObject* _type, AlifObject* _name)
 {
 	AlifObject* res_;

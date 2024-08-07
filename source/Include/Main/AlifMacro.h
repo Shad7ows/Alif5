@@ -25,6 +25,8 @@
 #  define ALIF_UNUSED(name) _unused_ ## name
 #endif
 
+#define ALIFARRAY_LENGTH(array) \
+    (sizeof(array) / sizeof((array)[0]))
 
 #define ALIFSUB_CONTAINER_OF(_ptr, _type, _member) \
     (_type*)((char*)_ptr - offsetof(_type, _member))

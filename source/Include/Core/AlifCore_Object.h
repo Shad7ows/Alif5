@@ -174,9 +174,32 @@ void alifSubObjectGC_link(AlifObject*);
 
 extern AlifObject* alifType_allocNoTrack(AlifTypeObject*, AlifSizeT);
 
+#  define MANAGED_DICT_OFFSET    (((int64_t)sizeof(AlifObject *))*-3)
+#  define MANAGED_WEAKREF_OFFSET (((int64_t)sizeof(AlifObject *))*-4)
+
+union AlifManagedDictPointer {
+public:
+	AlifDictObject* dict;
+} ;
+
+static inline AlifManagedDictPointer* alifObject_managedDictPointer(AlifObject* obj)
+{
+	return (AlifManagedDictPointer*)((char*)obj + MANAGED_DICT_OFFSET);
+}
+
+static inline AlifDictObject* alifObject_getManagedDict(AlifObject* obj)
+{
+	AlifManagedDictPointer* dorv = alifObject_managedDictPointer(obj);
+	return (AlifDictObject*)(dorv->dict);
+}
+
+static inline AlifDictValues* alifObject_inlineValues(AlifObject* obj)
+{
+	return (AlifDictValues*)((char*)obj + sizeof(AlifObject));
+}
 
 extern AlifObject** alifObject_computedDictPointer(AlifObject*);
-
+int alifObject_getMethod(AlifObject* , AlifObject* , AlifObject** );
 
 
 #define ALIFCFUNCTION_TRAMPOLINECALL(_meth, _self, _args)	(_meth)((_self), (_args))

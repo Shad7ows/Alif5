@@ -1,12 +1,14 @@
 #include "alif.h"
 
-//#include "AlifCore_Import.h"
+#include "AlifCore_Import.h"
 #include "AlifCore_InitConfig.h"
 #include "AlifCore_Interpreter.h"
 #include "AlifCore_AlifCycle.h"
 #include "AlifCore_AlifState.h"
 #include "AlifCore_Memory.h"
-
+#include "AlifCore_Call.h"
+#include "AlifCore_Namespace.h"
+#include "Marshal.h"
 
 
 #pragma warning(suppress : 4996)// for disable error wcsncpy function 
@@ -30,7 +32,7 @@ InitTable* alifImportInitTable = alifImportInitTab;
     (interp)->imports.modulesByIndex
 
 /***************/
-/* sys.modules */
+/* sys.modules */ // 126
 /***************/
 
 
@@ -46,6 +48,76 @@ AlifObject* alifImport_initModules(AlifInterpreter* _interp)
 AlifObject* alifImport_getModules(AlifInterpreter* _interp)
 {
 	return MODULES(_interp);
+}
+
+static inline AlifObject* get_modules_dict(AlifThread* tstate, bool fatal)
+{
+
+	AlifObject* modules = MODULES(tstate->interpreter);
+	if (modules == NULL) {
+		return NULL;
+	}
+	return modules;
+}
+
+int alifImport_setModuleString(const wchar_t* name, AlifObject* m)
+{
+	AlifThread* tstate = alifThread_get();
+	AlifObject* modules = get_modules_dict(tstate, true);
+	return alifMapping_setItemString(modules, name, m);
+}
+
+static AlifObject* import_getModule(AlifThread* tstate, AlifObject* name)
+{
+	AlifObject* modules = get_modules_dict(tstate, false);
+	if (modules == NULL) {
+		return NULL;
+	}
+
+	AlifObject* m;
+	ALIF_INCREF(modules);
+	(void)alifMapping_getOptionalItem(modules, name, &m);
+	ALIF_DECREF(modules);
+	return m;
+}
+
+static AlifObject* import_addModule(AlifThread* _tstate, AlifObject* _name)
+{
+	AlifObject* modules_ = _tstate->interpreter->imports.modules_;
+	if (modules_ == nullptr) {
+		return nullptr;
+	}
+
+	AlifObject* m_;
+	if (alifMapping_getOptionalItem(modules_, _name, &m_) < 0) {
+		return nullptr;
+	}
+	if (m_ != nullptr and ALIFMODULE_CHECK(m_)) {
+		return m_;
+	}
+	ALIF_XDECREF(m_);
+	m_ = alifModule_newObject(_name);
+	if (m_ == nullptr)
+		return nullptr;
+	if (alifObject_setItem(modules_, _name, m_) != 0) {
+		ALIF_DECREF(m_);
+		return nullptr;
+	}
+
+	return m_;
+}
+
+static void remove_module(AlifThread* tstate, AlifObject* name)
+{
+
+	AlifObject* modules = get_modules_dict(tstate, true);
+	if (ALIFDICT_CHECKEXACT(modules)) {
+		(void)alifDict_pop(modules, name, NULL);
+	}
+	else if (alifObject_delItem(modules, name) < 0) {
+
+	}
+
 }
 
 static AlifIntT initBuildin_modulesTable() {
@@ -102,6 +174,49 @@ static bool resolve_module_alias(const wchar_t* name, const class ModuleAlias* a
 	}
 }
 
+static AlifObject* moduleDict_forExec(AlifThread* tstate, AlifObject* name)
+{
+	AlifObject* m, * d;
+
+	m = import_addModule(tstate, name);
+	if (m == NULL)
+		return NULL;
+
+	d = alifModule_getDict(m);
+	AlifObject* strBuiltins = alifUStr_fromString(L"__builtins__");
+	int r = alifDict_contains(d, strBuiltins);
+	if (r == 0) {
+		AlifThread* thread = alifThread_get();
+		r = alifDict_setItem(d, strBuiltins, alifEval_getBuiltins(thread));
+	}
+	if (r < 0) {
+		remove_module(tstate, name);
+		ALIF_DECREF(m);
+		return NULL;
+	}
+
+	ALIF_INCREF(d);
+	ALIF_DECREF(m);
+	return d;
+}
+
+static AlifObject* execCode_inModule(AlifThread* tstate, AlifObject* name,
+	AlifObject* module_dict, AlifObject* code_object)
+{
+	AlifObject* v, * m;
+
+	v = alifEval_evalCode(code_object, module_dict, module_dict);
+	if (v == NULL) {
+		remove_module(tstate, name);
+		return NULL;
+	}
+	ALIF_DECREF(v);
+
+	m = import_getModule(tstate, name);
+
+
+	return m;
+}
 
 static bool use_frozen(void)
 {
@@ -228,7 +343,7 @@ static FrozenStatus find_frozen(AlifObject* nameobj, struct FrozenInfo* info)
 
 static AlifObject* unmarshal_frozen_code(AlifInterpreter* interp, class FrozenInfo* info)
 {
-	AlifObject* co = PyMarshal_ReadObjectFromString(info->data, info->size);
+	AlifObject* co = alifMarshal_readObjectFromString(info->data, info->size);
 	if (co == nullptr) {
 
 		//set_frozen_error(FROZEN_INVALID, info->nameobj);
@@ -256,7 +371,6 @@ int alifImport_importFrozenModuleObject(AlifObject* name)
 		return 0;
 	}
 	else if (status != Frozen_Okay) {
-		set_frozen_error(status, name);
 		return -1;
 	}
 	co = unmarshal_frozen_code(tstate->interpreter, &info);
@@ -265,31 +379,30 @@ int alifImport_importFrozenModuleObject(AlifObject* name)
 	}
 	if (info.isPackage) {
 		AlifObject* l;
-		m = import_add_module(tstate, name);
+		m = import_addModule(tstate, name);
 		if (m == nullptr)
 			goto errReturn;
-		d = PyModule_GetDict(m);
-		l = PyList_New(0);
+		d = alifModule_getDict(m);
+		l = alifNew_list(0);
 		if (l == nullptr) {
 			ALIF_DECREF(m);
 			goto errReturn;
 		}
-		err = PyDict_SetItemString(d, "__path__", l);
+		err = alifDict_setItemString(d, L"__path__", l);
 		ALIF_DECREF(l);
 		ALIF_DECREF(m);
 		if (err != 0)
 			goto errReturn;
 	}
-	d = module_dict_for_exec(tstate, name);
+	d = moduleDict_forExec(tstate, name);
 	if (d == nullptr) {
 		goto errReturn;
 	}
-	m = exec_code_in_module(tstate, name, d, co);
+	m = execCode_inModule(tstate, name, d, co);
 	if (m == nullptr) {
 		goto errReturn;
 	}
 	ALIF_DECREF(m);
-	/* Set __origname__ (consumed in FrozenImporter._setup_module()). */
 	AlifObject* origname;
 	if (info.origname) {
 		origname = alifUStr_fromString(info.origname);
@@ -300,7 +413,7 @@ int alifImport_importFrozenModuleObject(AlifObject* name)
 	else {
 		origname = ALIF_NEWREF(ALIF_NONE);
 	}
-	err = PyDict_SetItemString(d, L"__origname__", origname);
+	err = alifDict_setItemString(d, L"__origname__", origname);
 	ALIF_DECREF(origname);
 	if (err != 0) {
 		goto errReturn;
@@ -343,34 +456,35 @@ bootstrap_imp(AlifThread* tstate)
 	if (name == nullptr) {
 		return nullptr;
 	}
-
+	AlifObject* mod{};
+	AlifObject* spec{};
 	// Mock a ModuleSpec object just good enough for alifModule_FromDefAndSpec():
 	// an object with just a name attribute.
 	//
 	// _imp.__spec__ is overridden by importlib._bootstrap._instal() anyway.
-	AlifObject* attrs = Py_BuildValue("{sO}", "name", name);
+	AlifObject* attrs = alif_buildValue(L"{sO}", "name", name);
 	if (attrs == nullptr) {
 		goto error;
 	}
-	AlifObject* spec = _PyNamespace_New(attrs);
+	spec = alifNew_namespace(attrs);
 	ALIF_DECREF(attrs);
 	if (spec == nullptr) {
 		goto error;
 	}
 
-	// Create the _imp module from its definition.
-	AlifObject* mod = create_builtin(tstate, name, spec);
-	ALIF_CLEAR(name);
-	ALIF_DECREF(spec);
-	if (mod == nullptr) {
-		goto error;
-	}
+	//// Create the _imp module from its definition.
+	//mod = create_builtin(tstate, name, spec);
+	//ALIF_CLEAR(name);
+	//ALIF_DECREF(spec);
+	//if (mod == nullptr) {
+	//	goto error;
+	//}
 
-	// Execute the _imp module: call imp_module_exec().
-	if (exec_builtin_or_dynamic(mod) < 0) {
-		ALIF_DECREF(mod);
-		goto error;
-	}
+	//// Execute the _imp module: call imp_module_exec().
+	//if (exec_builtin_or_dynamic(mod) < 0) {
+	//	ALIF_DECREF(mod);
+	//	goto error;
+	//}
 	return mod;
 
 error:
@@ -403,8 +517,8 @@ static int init_importlib(AlifThread* tstate, AlifObject* sysmod)
 		return -1;
 	}
 
-	AlifObject* value = alifObject_callMethod(importlib, "_install",
-		"OO", sysmod, imp_mod);
+	AlifObject* value = alifObject_callMethod(importlib, L"_install",
+		L"OO", sysmod, imp_mod);
 	ALIF_DECREF(imp_mod);
 	if (value == nullptr) {
 		return -1;
@@ -415,31 +529,6 @@ static int init_importlib(AlifThread* tstate, AlifObject* sysmod)
 }
 
 
-static AlifObject* import_addModule(AlifThread* _tstate, AlifObject* _name)
-{
-	AlifObject* modules_ = _tstate->interpreter->imports.modules_;
-	if (modules_ == nullptr) {
-		return nullptr;
-	}
-
-	AlifObject* m_;
-	if (alifMapping_getOptionalItem(modules_, _name, &m_) < 0) {
-		return nullptr;
-	}
-	if (m_ != nullptr and ALIFMODULE_CHECK(m_)) {
-		return m_;
-	}
-	ALIF_XDECREF(m_);
-	m_ = alifModule_newObject(_name);
-	if (m_ == nullptr)
-		return nullptr;
-	if (alifObject_setItem(modules_, _name, m_) != 0) {
-		ALIF_DECREF(m_);
-		return nullptr;
-	}
-
-	return m_;
-}
 
 AlifObject* alifImport_addModuleRef(const wchar_t* _name)
 {

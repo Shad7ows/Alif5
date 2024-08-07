@@ -26,6 +26,7 @@
 #include "IntegerObject.h"
 #include "BoolObject.h"
 #include "FloatObject.h"
+#include "MemoryObject.h"
 #include "UStrObject.h"
 #include "AlifErrors.h"
 #include "ListObject.h"

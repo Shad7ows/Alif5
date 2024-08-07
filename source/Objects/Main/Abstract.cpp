@@ -72,6 +72,55 @@ AlifIntT alifMapping_getOptionalItem(AlifObject* _obj, AlifObject* _key, AlifObj
 
 }
 
+int alifMapping_setItemString(AlifObject* o, const wchar_t* key, AlifObject* value) // 2350
+{
+	AlifObject* okey;
+	int r;
+
+	if (key == NULL) {
+		return -1;
+	}
+
+	okey = alifUStr_fromString(key);
+	if (okey == NULL)
+		return -1;
+	r = alifObject_setItem(o, okey, value);
+	ALIF_DECREF(okey);
+	return r;
+}
+
+static AlifObject* method_output_as_list(AlifObject* o, AlifObject* meth)
+{
+	AlifObject* it, * result, * meth_output;
+
+	meth_output = alifObject_callMethodNoArgs(o, meth);
+	if (meth_output == NULL || ALIFLIST_CHECKEXACT(meth_output)) {
+		return meth_output;
+	}
+	it = alifObject_getIter(meth_output);
+	if (it == NULL) {
+
+		ALIF_DECREF(meth_output);
+		return NULL;
+	}
+	ALIF_DECREF(meth_output);
+	result = alifSequence_list(it);
+	ALIF_DECREF(it);
+	return result;
+}
+
+AlifObject* alifMapping_keys(AlifObject* o)
+{
+	if (o == NULL) {
+		return nullptr;
+	}
+	if (ALIFDICT_CHECKEXACT(o)) {
+		return alifDict_keys(o);
+	}
+	AlifObject* strKeys = alifUStr_fromString(L"keys");
+	return method_output_as_list(o, strKeys);
+}
+
 int alifObject_setItem(AlifObject* _o, AlifObject* _key, AlifObject* _value)
 {
 	if (_o == nullptr || _key == nullptr || _value == nullptr) {
@@ -91,6 +140,33 @@ int alifObject_setItem(AlifObject* _o, AlifObject* _key, AlifObject* _value)
 			return alifSequence_setItem(_o, keyValue, _value);
 		}
 		else if (ALIF_TYPE(_o)->asSequence->assItem) {
+			return -1;
+		}
+	}
+
+	return -1;
+}
+
+int alifObject_delItem(AlifObject* o, AlifObject* key)
+{
+	if (o == NULL || key == NULL) {
+		return -1;
+	}
+
+	AlifMappingMethods* m = ALIF_TYPE(o)->asMapping;
+	if (m && m->assSubScript) {
+		int res = m->assSubScript(o, key, (AlifObject*)NULL);
+		return res;
+	}
+
+	if (ALIF_TYPE(o)->asSequence) {
+		if (alifIndex_check(key)) {
+			int64_t key_value;
+			key_value = alifNumber_asSizeT(key, nullptr);
+
+			return alifSequence_delItem(o, key_value);
+		}
+		else if (ALIF_TYPE(o)->asSequence->assItem) {
 			return -1;
 		}
 	}
@@ -127,6 +203,105 @@ int alifObject_getBuffer(AlifObject* _obj, AlifBuffer* _view, int _flags)
     }
     int res_ = (*pb_->getBuffer)(_obj, _view, _flags);
     return res_;
+}
+
+static int isFortranContiguous(const AlifBuffer* view)
+{
+	int64_t sd, dim;
+	int i;
+
+
+	if (view->len == 0) return 1;
+	if (view->strides == NULL) {  
+		if (view->nDim <= 1) return 1;
+
+		sd = 0;
+		for (i = 0; i < view->nDim; i++) {
+			if (view->shape[i] > 1) sd += 1;
+		}
+		return sd <= 1;
+	}
+
+
+	sd = view->itemSize;
+	for (i = 0; i < view->nDim; i++) {
+		dim = view->shape[i];
+		if (dim > 1 && view->strides[i] != sd) {
+			return 0;
+		}
+		sd *= dim;
+	}
+	return 1;
+}
+
+static int isCContiguous(const AlifBuffer* view)
+{
+	int64_t sd, dim;
+	int i;
+
+	if (view->len == 0) return 1;
+	if (view->strides == NULL) return 1; 
+
+	sd = view->itemSize;
+	for (i = view->nDim - 1; i >= 0; i--) {
+		dim = view->shape[i];
+		if (dim > 1 && view->strides[i] != sd) {
+			return 0;
+		}
+		sd *= dim;
+	}
+	return 1;
+}
+
+int alifBuffer_isContiguous(const AlifBuffer* view, wchar_t order)
+{
+	if (view->subOffSets != NULL) return 0;
+
+	if (order == 'C')
+		return isCContiguous(view);
+	else if (order == 'F')
+		return isFortranContiguous(view);
+	else if (order == 'A')
+		return (isCContiguous(view) || isFortranContiguous(view));
+	return 0;
+}
+
+int alifBuffer_fillInfo(AlifBuffer* view, AlifObject* obj, void* buf, int64_t len, // 760
+	int readonly, int flags)
+{
+	if (view == NULL) {
+		return -1;
+	}
+
+	if (flags != ALIFBUF_SIMPLE) {  /* fast path */
+		if (flags == ALIFBUF_READ || flags == ALIFBUF_WRITE) {
+			return -1;
+		}
+		if (((flags & ALIFBUF_WRITABLE) == ALIFBUF_WRITABLE) &&
+			(readonly == 1)) {
+
+			return -1;
+		}
+	}
+
+	view->obj = alif_xNewRef(obj);
+	view->buf = buf;
+	view->len = len;
+	view->readonly = readonly;
+	view->itemSize = 1;
+	view->format = NULL;
+	//if ((flags & ALIFBUF_FORMAT) == ALIFBUF_FORMAT)
+		//view->format = L"B"; // سيتم مراجعته لاحقا
+	view->nDim = 1;
+	view->shape = NULL;
+	if ((flags & ALIFBUF_ND) == ALIFBUF_ND)
+		view->shape = &(view->len);
+	view->strides = NULL;
+	if ((flags & ALIFBUF_STRIDES) == ALIFBUF_STRIDES)
+		view->strides = &(view->itemSize);
+	view->subOffSets = NULL;
+	view->internal = NULL;
+	return 0;
 }
 
 #define NB_SLOT(_x) offsetof(AlifNumberMethods, _x)

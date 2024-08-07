@@ -8,6 +8,7 @@
 #include "AlifCore_AlifState.h"
 #include "AlifParserEngine.h"
 //#include "AlifCore_AlifRun.h"
+#include "Marshal.h"
 
 #ifdef _WINDOWS
 #include "windows.h"

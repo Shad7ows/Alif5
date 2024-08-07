@@ -13,6 +13,15 @@ int alifDict_getItemRef(AlifObject* , AlifObject* , AlifObject** );
 int alifDict_setItem(AlifObject*, AlifObject*, AlifObject* );
 int alifDict_next(AlifObject* , int64_t* , AlifObject** , AlifObject** );
 AlifObject* alifDict_keys(AlifObject* );
+int alifDict_contains(AlifObject* , AlifObject* );
+
+int alifDict_update(AlifObject* , AlifObject* );
+
+
+int alifDict_setItemString(AlifObject*, const wchar_t* , AlifObject* );
+
+extern AlifTypeObject _alifDictIterKeyType_;
+extern AlifTypeObject _alifDictIterItemType_;
 
 
 typedef class DictKeysObject AlifDictKeysObject;
@@ -36,6 +45,7 @@ AlifObject* alifDictGetItem_knownHash(AlifObject* , AlifObject* , size_t );
 #define ALIFDICT_GET_SIZE(_op) (((AlifDictObject*)_op)->used)
 
 int alifDict_containsString(AlifObject*, const wchar_t*);
+int alifDict_pop(AlifObject* , AlifObject* , AlifObject** );
 
 #define ALIF_FOREACH_DICT_EVENT(V) \
     V(ADDED)                     \
@@ -51,16 +61,4 @@ int alifDict_containsString(AlifObject*, const wchar_t*);
 #undef ALIF_DEF_EVENT
 } ;
 
-//AlifObject* alifNew_dict();
-//AlifDictObject* deleteItem_fromIndex(AlifDictObject*, int64_t);
-//AlifIntT dict_deleteItem(AlifDictObject*, AlifObject*);
-//int alifDict_getItemRef(AlifObject*, AlifObject*, AlifObject**);
-//bool alifDict_next(AlifObject*, AlifSizeT*, AlifObject**, AlifObject**, AlifUSizeT*);
-//AlifObject* alifDict_keys(AlifObject*);
-//AlifIntT dict_setItem(AlifDictObject* , AlifObject*, AlifObject* );
-//AlifIntT dict_ass_sub(AlifDictObject*, AlifObject*, AlifObject*);
-//int dict_lookupItem(AlifDictObject*, AlifObject*, size_t, AlifObject** );
-//AlifObject* dict_getItem(AlifObject* , AlifObject* );
-//bool dict_contain(AlifObject* , AlifObject* ); 
-//AlifDictObject* dict_resize(AlifDictObject* );
-//AlifDictObject* deleteItem_fromIndex(AlifDictObject* , int64_t );
+

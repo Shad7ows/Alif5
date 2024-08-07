@@ -1,6 +1,48 @@
 #include "alif.h"
+#include "AlifCore_Call.h"
 #include "AlifCore_Memory.h"
-#include"AlifCore_Code.h"
+#include "AlifCore_Code.h"
+
+
+#define TYPE_NULL               '0'
+#define TYPE_NONE               'N'
+#define TYPE_FALSE              'F'
+#define TYPE_TRUE               'T'
+#define TYPE_STOPITER           'S'
+#define TYPE_ELLIPSIS           '.'
+#define TYPE_INT                'i'
+/* TYPE_INT64 is not generated anymore.
+   Supported for backward compatibility only. */
+#define TYPE_INT64              'I'
+#define TYPE_FLOAT              'f'
+#define TYPE_BINARY_FLOAT       'g'
+#define TYPE_COMPLEX            'x'
+#define TYPE_BINARY_COMPLEX     'y'
+#define TYPE_LONG               'l'
+#define TYPE_STRING             's'
+#define TYPE_INTERNED           't'
+#define TYPE_REF                'r'
+#define TYPE_TUPLE              '('
+#define TYPE_LIST               '['
+#define TYPE_DICT               '{'
+#define TYPE_CODE               'c'
+#define TYPE_UNICODE            'u'
+#define TYPE_UNKNOWN            '?'
+#define TYPE_SET                '<'
+#define TYPE_FROZENSET          '>'
+#define FLAG_REF                '\x80' /* with a type, add obj to index */
+
+#define TYPE_ASCII              'a'
+#define TYPE_ASCII_INTERNED     'A'
+#define TYPE_SMALL_TUPLE        ')'
+#define TYPE_SHORT_ASCII        'z'
+#define TYPE_SHORT_ASCII_INTERNED 'Z'
+
+#define WFERR_OK 0
+#define WFERR_UNMARSHALLABLE 1
+#define WFERR_NESTEDTOODEEP 2
+#define WFERR_NOMEMORY 3
+#define WFERR_CODE_NOT_ALLOWED 4
 
 typedef class Rfile{ // 696
 public:
@@ -15,10 +57,178 @@ public:
 	int allowCode;
 } ;
 
-static AlifObject* r_object(Rfile* p)
+#define SIZE32_MAX  0x7FFFFFFF
+
+
+static const wchar_t* r_string(int64_t n, Rfile* p) // 707
+{
+	int64_t read = -1;
+
+	if (p->ptr != NULL) {
+		/* Fast path for loads() */
+		const wchar_t* res = p->ptr;
+		int64_t left = p->end - p->ptr;
+		if (left < n) {
+
+			return NULL;
+		}
+		p->ptr += n;
+		return res;
+	}
+	if (p->buf == NULL) {
+		p->buf = (wchar_t*)alifMem_dataAlloc(n);
+		if (p->buf == NULL) {
+			return NULL;
+		}
+		p->bufSize = n;
+	}
+	else if (p->bufSize < n) {
+		wchar_t* tmp = (wchar_t*)alifMem_objRealloc(p->buf, n);
+		if (tmp == NULL) {
+			return NULL;
+		}
+		p->buf = tmp;
+		p->bufSize = n;
+	}
+
+	if (!p->readable) {
+		read = fread(p->buf, 1, n, p->fp);
+	}
+	else {
+		AlifObject* res, * mview;
+		AlifBuffer buf;
+
+		if (alifBuffer_fillInfo(&buf, NULL, p->buf, n, 0, ALIFBUF_CONTIG) == -1)
+			return NULL;
+		mview = alifMemoryView_fromBuffer(&buf);
+		if (mview == NULL)
+			return NULL;
+
+		AlifObject* strReadInto = alifUStr_fromString(L"readinto");
+		res = alifSubObject_callMethod(p->readable, strReadInto, L"N", mview);
+		if (res != NULL) {
+			read = alifInteger_asLongLong(res);
+			ALIF_DECREF(res);
+		}
+	}
+	if (read != n) {
+		return NULL;
+	}
+	return p->buf;
+}
+
+static int r_byte(Rfile* p)
+{
+	if (p->ptr != NULL) {
+		if (p->ptr < p->end) {
+			return (unsigned char)*p->ptr++;
+		}
+	}
+	else if (!p->readable) {
+		int c = getc(p->fp);
+		if (c != EOF) {
+			return c;
+		}
+	}
+	else {
+		const wchar_t* ptr = r_string(1, p);
+		if (ptr != NULL) {
+			return *(const unsigned char*)ptr;
+		}
+		return EOF;
+	}
+
+	return EOF;
+}
+
+static long r_long(Rfile* p)
+{
+	long x = -1;
+	const unsigned char* buffer;
+
+	buffer = (const unsigned char*)r_string(4, p);
+	if (buffer != NULL) {
+		x = buffer[0];
+		x |= (long)buffer[1] << 8;
+		x |= (long)buffer[2] << 16;
+		x |= (long)buffer[3] << 24;
+#if SIZEOF_LONG > 4
+		/* Sign extension for 64-bit machines */
+		x |= -(x & 0x80000000L);
+#endif
+	}
+	return x;
+}
+
+static double r_float_bin(Rfile* p)
+{
+	const wchar_t* buf = r_string(8, p);
+	if (buf == NULL)
+		return -1;
+	return 1;
+	//return alifFloat_unpack8(buf, 1);
+}
+
+
+static double r_float_str(Rfile* p)
+{
+	int n;
+	char buf[256];
+	const wchar_t* ptr;
+	n = r_byte(p);
+	if (n == EOF) {
+		return -1;
+	}
+	ptr = r_string(n, p);
+	if (ptr == NULL) {
+		return -1;
+	}
+	memcpy(buf, ptr, n);
+	buf[n] = '\0';
+	return 1;
+	//return alifOS_string_to_double(buf, NULL, NULL);
+}
+
+static int64_t r_ref_reserve(int flag, Rfile* p)
+{
+	if (flag) { /* currently only FLAG_REF is defined */
+		int64_t idx = ALIFLIST_GET_SIZE(p->refs);
+		if (idx >= 0x7ffffffe) {
+			return -1;
+		}
+		if (alifList_append(p->refs, ALIF_NONE) < 0)
+			return -1;
+		return idx;
+	}
+	else
+		return 0;
+}
+
+static AlifObject* r_ref_insert(AlifObject* o, int64_t idx, int flag, Rfile* p)
+{
+	if (o != NULL && flag) { /* currently only FLAG_REF is defined */
+		AlifObject* tmp = ALIFLIST_GET_ITEM(p->refs, idx);
+		ALIFLIST_SETITEM(p->refs, idx, ALIF_NEWREF(o));
+		ALIF_DECREF(tmp);
+	}
+	return o;
+}
+
+static AlifObject* r_ref(AlifObject* o, int flag, Rfile* p)
+{
+	if (o == NULL)
+		return NULL;
+	if (alifList_append(p->refs, o) < 0) {
+		ALIF_DECREF(o); 
+		return NULL;
+	}
+	return o;
+}
+
+static AlifObject* r_object(Rfile* p) // 1005
 {
 
-	AlifObject* v, * v2;
+	AlifObject* v{}, * v2;
 	int64_t idx = 0;
 	long i, n;
 	int type, code = r_byte(p);
@@ -50,50 +260,45 @@ static AlifObject* r_object(Rfile* p)
 		break;
 
 	case TYPE_NONE:
-		retval = Py_None;
+		retval = ALIF_NONE;
 		break;
 
 	case TYPE_STOPITER:
-		retval = Py_NewRef(PyExc_StopIteration);
+		//retval = ALIF_NEWREF(_alifExcStopIteration_);
 		break;
 
 	case TYPE_ELLIPSIS:
-		retval = Py_Ellipsis;
+		//retval = ALIF_ELLIPSIS;
 		break;
 
 	case TYPE_FALSE:
-		retval = Py_False;
+		retval = ALIF_FALSE;
 		break;
 
 	case TYPE_TRUE:
-		retval = Py_True;
+		retval = ALIF_TRUE;
 		break;
 
 	case TYPE_INT:
 		n = r_long(p);
-		if (n == -1 && PyErr_Occurred()) {
-			break;
-		}
-		retval = PyLong_FromLong(n);
+		retval = alifInteger_fromLongLong(n);
 		R_REF(retval);
 		break;
 
-	case TYPE_INT64:
-		retval = r_long64(p);
-		R_REF(retval);
-		break;
+	//case TYPE_INT64:
+	//	retval = r_long64(p);
+	//	R_REF(retval);
+	//	break;
 
-	case TYPE_LONG:
-		retval = r_PyLong(p);
-		R_REF(retval);
-		break;
+	//case TYPE_LONG:
+	//	retval = r_alifLong(p);
+	//	R_REF(retval);
+	//	break;
 
 	case TYPE_FLOAT:
 	{
 		double x = r_float_str(p);
-		if (x == -1.0 && PyErr_Occurred())
-			break;
-		retval = PyFloat_FromDouble(x);
+		retval = alifFloat_fromDouble(x);
 		R_REF(retval);
 		break;
 	}
@@ -101,61 +306,48 @@ static AlifObject* r_object(Rfile* p)
 	case TYPE_BINARY_FLOAT:
 	{
 		double x = r_float_bin(p);
-		if (x == -1.0 && PyErr_Occurred())
-			break;
-		retval = PyFloat_FromDouble(x);
+		retval = alifFloat_fromDouble(x);
 		R_REF(retval);
 		break;
 	}
 
-	case TYPE_COMPLEX:
-	{
-		Py_complex c;
-		c.real = r_float_str(p);
-		if (c.real == -1.0 && PyErr_Occurred())
-			break;
-		c.imag = r_float_str(p);
-		if (c.imag == -1.0 && PyErr_Occurred())
-			break;
-		retval = PyComplex_FromCComplex(c);
-		R_REF(retval);
-		break;
-	}
+	//case TYPE_COMPLEX:
+	//{
+	//	alif_complex c;
+	//	c.real = r_float_str(p);
+	//	c.imag = r_float_str(p);
+	//	retval = alifComplex_FromCComplex(c);
+	//	R_REF(retval);
+	//	break;
+	//}
 
-	case TYPE_BINARY_COMPLEX:
-	{
-		Py_complex c;
-		c.real = r_float_bin(p);
-		if (c.real == -1.0 && PyErr_Occurred())
-			break;
-		c.imag = r_float_bin(p);
-		if (c.imag == -1.0 && PyErr_Occurred())
-			break;
-		retval = PyComplex_FromCComplex(c);
-		R_REF(retval);
-		break;
-	}
+	//case TYPE_BINARY_COMPLEX:
+	//{
+	//	alif_complex c;
+	//	c.real = r_float_bin(p);
+	//	c.imag = r_float_bin(p);
+	//	retval = alifComplex_FromCComplex(c);
+	//	R_REF(retval);
+	//	break;
+	//}
 
 	case TYPE_STRING:
 	{
-		const char* ptr;
+		const wchar_t* ptr;
 		n = r_long(p);
 		if (n < 0 || n > SIZE32_MAX) {
-			if (!PyErr_Occurred()) {
-				PyErr_SetString(PyExc_ValueError,
-					"bad marshal data (bytes object size out of range)");
-			}
+			
 			break;
 		}
-		v = PyBytes_FromStringAndSize((char*)NULL, n);
+		v = alifBytes_fromStringAndSize((wchar_t*)NULL, n);
 		if (v == NULL)
 			break;
 		ptr = r_string(n, p);
 		if (ptr == NULL) {
-			Py_DECREF(v);
+			ALIF_DECREF(v);
 			break;
 		}
-		memcpy(PyBytes_AS_STRING(v), ptr, n);
+		memcpy(ALIFWBYTES_AS_STRING(v), ptr, n);
 		retval = v;
 		R_REF(retval);
 		break;
@@ -163,21 +355,17 @@ static AlifObject* r_object(Rfile* p)
 
 	case TYPE_ASCII_INTERNED:
 		is_interned = 1;
-		_Py_FALLTHROUGH;
+		ALIFFALLTHROUGH;
 	case TYPE_ASCII:
 		n = r_long(p);
 		if (n < 0 || n > SIZE32_MAX) {
-			if (!PyErr_Occurred()) {
-				PyErr_SetString(PyExc_ValueError,
-					"bad marshal data (string size out of range)");
-			}
 			break;
 		}
 		goto _read_ascii;
 
 	case TYPE_SHORT_ASCII_INTERNED:
 		is_interned = 1;
-		_Py_FALLTHROUGH;
+		ALIFFALLTHROUGH;
 	case TYPE_SHORT_ASCII:
 		n = r_byte(p);
 		if (n == EOF) {
@@ -185,18 +373,18 @@ static AlifObject* r_object(Rfile* p)
 		}
 	_read_ascii:
 		{
-			const char* ptr;
+			const wchar_t* ptr;
 			ptr = r_string(n, p);
 			if (ptr == NULL)
 				break;
-			v = PyUnicode_FromKindAndData(PyUnicode_1BYTE_KIND, ptr, n);
+			//v = alifUStr_fromKindAndData(ALIFUSTR_1BYTE_KIND, ptr, n);
 			if (v == NULL)
 				break;
 			if (is_interned) {
-				// marshal is meant to serialize .pyc files with code
+				// marshal is meant to serialize .alifc files with code
 				// objects, and code-related strings are currently immortal.
-				PyInterpreterState* interp = _PyInterpreterState_GET();
-				_PyUnicode_InternImmortal(interp, &v);
+				//AlifInterpreter* interp = alifInterpreter_get();
+				//alifUStr_InternImmortal(interp, &v);
 			}
 			retval = v;
 			R_REF(retval);
@@ -205,35 +393,31 @@ static AlifObject* r_object(Rfile* p)
 
 	case TYPE_INTERNED:
 		is_interned = 1;
-		_Py_FALLTHROUGH;
+		ALIFFALLTHROUGH;
 	case TYPE_UNICODE:
 	{
-		const char* buffer;
+		const wchar_t* buffer;
 
 		n = r_long(p);
 		if (n < 0 || n > SIZE32_MAX) {
-			if (!PyErr_Occurred()) {
-				PyErr_SetString(PyExc_ValueError,
-					"bad marshal data (string size out of range)");
-			}
 			break;
 		}
 		if (n != 0) {
 			buffer = r_string(n, p);
 			if (buffer == NULL)
 				break;
-			v = PyUnicode_DecodeUTF8(buffer, n, "surrogatepass");
+			v = alifUStr_decodeUTF8(buffer, n, L"surrogatepass");
 		}
 		else {
-			v = PyUnicode_New(0, 0);
+			v = alifNew_uStr(0, 0);
 		}
 		if (v == NULL)
 			break;
 		if (is_interned) {
-			// marshal is meant to serialize .pyc files with code
+			// marshal is meant to serialize .alifc files with code
 			// objects, and code-related strings are currently immortal.
-			PyInterpreterState* interp = _PyInterpreterState_GET();
-			_PyUnicode_InternImmortal(interp, &v);
+			//AlifInterpreterState* interp = alifInterpreterState_GET();
+			//alifUnicode_internImmortal(interp, &v);
 		}
 		retval = v;
 		R_REF(retval);
@@ -249,14 +433,10 @@ static AlifObject* r_object(Rfile* p)
 	case TYPE_TUPLE:
 		n = r_long(p);
 		if (n < 0 || n > SIZE32_MAX) {
-			if (!PyErr_Occurred()) {
-				PyErr_SetString(PyExc_ValueError,
-					"bad marshal data (tuple size out of range)");
-			}
 			break;
 		}
 	_read_tuple:
-		v = PyTuple_New(n);
+		v = alifNew_tuple(n);
 		R_REF(v);
 		if (v == NULL)
 			break;
@@ -264,13 +444,10 @@ static AlifObject* r_object(Rfile* p)
 		for (i = 0; i < n; i++) {
 			v2 = r_object(p);
 			if (v2 == NULL) {
-				if (!PyErr_Occurred())
-					PyErr_SetString(PyExc_TypeError,
-						"NULL object in marshal data for tuple");
-				Py_SETREF(v, NULL);
+				ALIF_SETREF(v, NULL);
 				break;
 			}
-			PyTuple_SET_ITEM(v, i, v2);
+			ALIFTUPLE_SET_ITEM(v, i, v2);
 		}
 		retval = v;
 		break;
@@ -278,32 +455,25 @@ static AlifObject* r_object(Rfile* p)
 	case TYPE_LIST:
 		n = r_long(p);
 		if (n < 0 || n > SIZE32_MAX) {
-			if (!PyErr_Occurred()) {
-				PyErr_SetString(PyExc_ValueError,
-					"bad marshal data (list size out of range)");
-			}
 			break;
 		}
-		v = PyList_New(n);
+		v = alifNew_list(n);
 		R_REF(v);
 		if (v == NULL)
 			break;
 		for (i = 0; i < n; i++) {
 			v2 = r_object(p);
 			if (v2 == NULL) {
-				if (!PyErr_Occurred())
-					PyErr_SetString(PyExc_TypeError,
-						"NULL object in marshal data for list");
-				Py_SETREF(v, NULL);
+				ALIF_SETREF(v, NULL);
 				break;
 			}
-			PyList_SET_ITEM(v, i, v2);
+			ALIFLIST_SETITEM(v, i, v2);
 		}
 		retval = v;
 		break;
 
 	case TYPE_DICT:
-		v = PyDict_New();
+		v = alifNew_dict();
 		R_REF(v);
 		if (v == NULL)
 			break;
@@ -314,19 +484,16 @@ static AlifObject* r_object(Rfile* p)
 				break;
 			val = r_object(p);
 			if (val == NULL) {
-				Py_DECREF(key);
+				ALIF_DECREF(key);
 				break;
 			}
-			if (PyDict_SetItem(v, key, val) < 0) {
-				Py_DECREF(key);
-				Py_DECREF(val);
+			if (alifDict_setItem(v, key, val) < 0) {
+				ALIF_DECREF(key);
+				ALIF_DECREF(val);
 				break;
 			}
-			Py_DECREF(key);
-			Py_DECREF(val);
-		}
-		if (PyErr_Occurred()) {
-			Py_SETREF(v, NULL);
+			ALIF_DECREF(key);
+			ALIF_DECREF(val);
 		}
 		retval = v;
 		break;
@@ -335,33 +502,27 @@ static AlifObject* r_object(Rfile* p)
 	case TYPE_FROZENSET:
 		n = r_long(p);
 		if (n < 0 || n > SIZE32_MAX) {
-			if (!PyErr_Occurred()) {
-				PyErr_SetString(PyExc_ValueError,
-					"bad marshal data (set size out of range)");
-			}
 			break;
 		}
 
 		if (n == 0 && type == TYPE_FROZENSET) {
 			/* call frozenset() to get the empty frozenset singleton */
-			v = _PyObject_CallNoArgs((AlifObject*)&PyFrozenSet_Type);
+			//v = alifObject_CallNoArgs((AlifObject*)&_alifFrozenSetType_);
 			if (v == NULL)
 				break;
 			R_REF(v);
 			retval = v;
 		}
 		else {
-			v = (type == TYPE_SET) ? PySet_New(NULL) : PyFrozenSet_New(NULL);
+			v = (type == TYPE_SET) ? alifNew_set(NULL) : nullptr;/*alifFrozenSet_New(NULL);*/
 			if (type == TYPE_SET) {
 				R_REF(v);
 			}
 			else {
-				/* must use delayed registration of frozensets because they must
-				 * be init with a refcount of 1
-				 */
+
 				idx = r_ref_reserve(flag, p);
 				if (idx < 0)
-					Py_CLEAR(v); /* signal error */
+					ALIF_CLEAR(v); /* signal error */
 			}
 			if (v == NULL)
 				break;
@@ -369,19 +530,16 @@ static AlifObject* r_object(Rfile* p)
 			for (i = 0; i < n; i++) {
 				v2 = r_object(p);
 				if (v2 == NULL) {
-					if (!PyErr_Occurred())
-						PyErr_SetString(PyExc_TypeError,
-							"NULL object in marshal data for set");
-					Py_SETREF(v, NULL);
+					ALIF_SETREF(v, NULL);
 					break;
 				}
-				if (PySet_Add(v, v2) == -1) {
-					Py_DECREF(v);
-					Py_DECREF(v2);
+				if (alifSet_add(v, v2) == -1) {
+					ALIF_DECREF(v);
+					ALIF_DECREF(v2);
 					v = NULL;
 					break;
 				}
-				Py_DECREF(v2);
+				ALIF_DECREF(v2);
 			}
 			if (type != TYPE_SET)
 				v = r_ref_insert(v, idx, flag, p);
@@ -408,9 +566,7 @@ static AlifObject* r_object(Rfile* p)
 		AlifObject* linetable = NULL;
 		AlifObject* exceptiontable = NULL;
 
-		if (!p->allow_code) {
-			PyErr_SetString(PyExc_ValueError,
-				"unmarshalling code objects is disallowed");
+		if (!p->allowCode) {
 			break;
 		}
 		idx = r_ref_reserve(flag, p);
@@ -421,21 +577,10 @@ static AlifObject* r_object(Rfile* p)
 
 		/* XXX ignore long->int overflows for now */
 		argcount = (int)r_long(p);
-		if (argcount == -1 && PyErr_Occurred())
-			goto code_error;
 		posonlyargcount = (int)r_long(p);
-		if (posonlyargcount == -1 && PyErr_Occurred()) {
-			goto code_error;
-		}
 		kwonlyargcount = (int)r_long(p);
-		if (kwonlyargcount == -1 && PyErr_Occurred())
-			goto code_error;
 		stacksize = (int)r_long(p);
-		if (stacksize == -1 && PyErr_Occurred())
-			goto code_error;
 		flags = (int)r_long(p);
-		if (flags == -1 && PyErr_Occurred())
-			goto code_error;
 		code = r_object(p);
 		if (code == NULL)
 			goto code_error;
@@ -461,8 +606,6 @@ static AlifObject* r_object(Rfile* p)
 		if (qualname == NULL)
 			goto code_error;
 		firstlineno = (int)r_long(p);
-		if (firstlineno == -1 && PyErr_Occurred())
-			break;
 		linetable = r_object(p);
 		if (linetable == NULL)
 			goto code_error;
@@ -470,47 +613,43 @@ static AlifObject* r_object(Rfile* p)
 		if (exceptiontable == NULL)
 			goto code_error;
 
-		class AlifCodeConstructor con = {
-			 filename,
-		     name,
-			 qualname,
-			 flags,
+		//class AlifCodeConstructor con = {
+		//	 filename,
+		//     name,
+		//	 qualname,
+		//	 flags,
 
-			code,
-			firstlineno,
-			 linetable,
+		//	code,
+		//	firstlineno,
+		//	 linetable,
 
-			 consts,
-			names,
+		//	 consts,
+		//	names,
 
-			 localsplusnames,
-			 localspluskinds,
+		//	 localsplusnames,
+		//	 localspluskinds,
 
-			 argcount,
-			posonlyargcount,
-		 kwonlyargcount,
+		//	 argcount,
+		//	posonlyargcount,
+		// kwonlyargcount,
 
-			stacksize,
+		//	stacksize,
 
-			 exceptiontable,
-		};
+		//	 exceptiontable,
+		//};
 
-		if (_PyCode_Validate(&con) < 0) {
-			goto code_error;
-		}
+		//if (alifCode_Validate(&con) < 0) {
+		//	goto code_error;
+		//}
 
-		v = (AlifObject*)_PyCode_New(&con);
-		if (v == NULL) {
-			goto code_error;
-		}
+		//v = (AlifObject*)alifCode_New(&con);
+		//if (v == NULL) {
+		//	goto code_error;
+		//}
 
-		v = r_ref_insert(v, idx, flag, p);
+		//v = r_ref_insert(v, idx, flag, p);
 
 	code_error:
-		if (v == NULL && !PyErr_Occurred()) {
-			PyErr_SetString(PyExc_TypeError,
-				"NULL object in marshal data for code object");
-		}
 		ALIF_XDECREF(code);
 		ALIF_XDECREF(consts);
 		ALIF_XDECREF(names);
@@ -527,18 +666,14 @@ static AlifObject* r_object(Rfile* p)
 
 	case TYPE_REF:
 		n = r_long(p);
-		if (n < 0 || n >= PyList_GET_SIZE(p->refs)) {
-			if (!PyErr_Occurred()) {
-				PyErr_SetString(PyExc_ValueError,
-					"bad marshal data (invalid reference)");
-			}
+		if (n < 0 || n >= ALIFLIST_GET_SIZE(p->refs)) {
 			break;
 		}
-		v = PyList_GET_ITEM(p->refs, n);
-		if (v == Py_None) {
+		v = ALIFLIST_GET_ITEM(p->refs, n);
+		if (v == ALIF_NONE) {
 			break;
 		}
-		retval = Py_NewRef(v);
+		retval = ALIF_NEWREF(v);
 		break;
 
 	default:
@@ -553,19 +688,8 @@ static AlifObject* r_object(Rfile* p)
 static AlifObject* read_object(Rfile* p) // 1548
 {
 	AlifObject* v;
-	if (p->ptr && p->end) {
-		//if (alifSys_audit("marshal.loads", "y#", p->ptr, (int64_t)(p->end - p->ptr)) < 0) {
-			//return NULL;
-		//}
-	}
-	else if (p->fp || p->readable) {
-		//if (alifSys_audit("marshal.load", NULL) < 0) {
-			//return NULL;
-		//}
-	}
 	v = r_object(p);
-	//if (v == NULL && !PyErr_Occurred())
-		//PyErr_SetString(PyExc_TypeError, "NULL object in marshal data for object");
+
 	return v;
 }
 

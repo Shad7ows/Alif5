@@ -18,7 +18,8 @@ int _alifArg_checkPositional(const wchar_t*, int64_t, int64_t, int64_t);
     ((!ALIF_ANY_VARARGS(_max) && (_min) <= (nargs) && (nargs) <= (_max)) or _alifArg_checkPositional((funcname), (nargs), (_min), (_max)))
 
 
-
+AlifObject** alif_vaBuildStack(AlifObject** , int64_t ,
+	const wchar_t* , va_list , int64_t* );
 
 
 

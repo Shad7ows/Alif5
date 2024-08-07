@@ -771,9 +771,9 @@ AlifObject* alifEval_vector(AlifThread* _thread, AlifFunctionObject* _func, Alif
 
 
 AlifObject* alifEval_getBuiltins(AlifThread* _thread) { 
-	//AlifInterpreterFrame* frame = alifThread_getFrame(_thread);
-	//if (frame != nullptr) {
-	//	return frame->builtins;
-	//}
+	AlifInterpreterFrame* frame = alifThread_getFrame(_thread);
+	if (frame != nullptr) {
+		return frame->builtins;
+	}
 	return _thread->interpreter->builtins;
 }

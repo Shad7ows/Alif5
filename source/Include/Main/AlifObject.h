@@ -151,7 +151,8 @@ typedef AlifObject* (*VectorCallFunc)(AlifObject*, AlifObject* const*, AlifUSize
 
 AlifObject* alifObject_richCompare(AlifObject*, AlifObject*, int);
 int alifObject_richCompareBool(AlifObject*, AlifObject*, int);
-
+AlifObject* alifObject_getAttrString(AlifObject* , const wchar_t* );
+AlifObject* alifObject_getAttr(AlifObject* , AlifObject* );
 int64_t alifObject_hash(AlifObject*);
 int64_t alifObject_hashNotImplemented(AlifObject*);
 
@@ -528,6 +529,7 @@ public:
 
 
 AlifObject* alifType_lookup(AlifTypeObject* , AlifObject* );
+AlifObject* alifType_lookupRef(AlifTypeObject* , AlifObject* );
 
 #define ALIF_SETREF(_dst, _src) \
     do { \

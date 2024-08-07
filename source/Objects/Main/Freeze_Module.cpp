@@ -1,5 +1,5 @@
 #include "alif.h"
-
+#include "Marshal.h"
 
 const class Frozen* _alifImportFrozenBootstrap_;
 const class Frozen* _alifImportFrozenStdlib_;
