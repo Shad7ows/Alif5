@@ -167,7 +167,6 @@ AlifObject* alifImport_getModules(AlifInterpreter* _interp)
 
 static inline AlifObject* get_modules_dict(AlifThread* tstate, bool fatal)
 {
-
 	AlifObject* modules = MODULES(tstate->interpreter);
 	if (modules == NULL) {
 		return NULL;
@@ -220,6 +219,18 @@ static AlifObject* import_addModule(AlifThread* _tstate, AlifObject* _name)
 	}
 
 	return m_;
+}
+
+AlifObject* alifImport_addModuleRef(const wchar_t* _name)
+{
+	AlifObject* nameObj = alifUStr_fromString(_name);
+	if (nameObj == nullptr) {
+		return nullptr;
+	}
+	AlifThread* tstate = alifThread_get();
+	AlifObject* module_ = import_addModule(tstate, nameObj);
+	ALIF_DECREF(nameObj);
+	return module_;
 }
 
 static void remove_module(AlifThread* tstate, AlifObject* name)
@@ -284,6 +295,7 @@ const char* alifImport_swapPackageContext(const char* newcontext)
 	return oldcontext;
 }
 
+
 static int execBuiltin_orDynamic(AlifObject* mod) {
 	AlifModuleDef* def;
 	void* state;
@@ -306,23 +318,840 @@ static int execBuiltin_orDynamic(AlifObject* mod) {
 	return alifModule_execDef(mod, def);
 }
 
-static bool resolve_module_alias(const wchar_t* name, const class ModuleAlias* aliases,
-	const wchar_t** alias)
+static inline void extensions_lock_acquire()
 {
-	const class ModuleAlias* entry; 
-	for (entry = aliases; ; entry++) {
-		if (entry->name == NULL) {
-			/* It isn't an alias. */
-			return false;
+	ALIFMUTEX_LOCK(&_alifDureRun_.imports.extensions.mutex);
+}
+
+static inline void extensions_lock_release()
+{
+	ALIFMUTEX_UNLOCK(&_alifDureRun_.imports.extensions.mutex);
+}
+
+typedef class CachedMDict {
+public:
+	AlifObject* copied;
+	int64_t interpid;
+};
+
+class ExtensionsCacheValue {
+public:
+	AlifModuleDef* def;
+	AlifModInitFunction init;
+	int64_t index;
+	CachedMDict* dict;
+	CachedMDict Mdict;
+
+	AlifExtModuleOrigin origin;
+};
+
+static AlifObject* getCore_moduleDict(AlifInterpreter*, AlifObject*, AlifObject*);
+
+static AlifObject*
+getCached_mDict(class ExtensionsCacheValue* value,
+	AlifObject* name, AlifObject* path) // 1120
+{
+	AlifInterpreter* interp = alifInterpreter_get();
+	if (value->origin == AlifExt_Module_Origin_Core) {
+		return getCore_moduleDict(interp, name, path);
+	}
+	AlifObject* dict = value->def->base.copy;
+	ALIF_XINCREF(dict);
+	return dict;
+}
+
+static void* hashTable_keyFrom_2Strings(AlifObject* str1, AlifObject* str2, const wchar_t sep)
+{
+	int64_t str1_len, str2_len;
+	const wchar_t* str1_data = alifUStr_asUTF8AndSize(str1, &str1_len);
+	const wchar_t* str2_data = alifUStr_asUTF8AndSize(str2, &str2_len);
+	if (str1_data == nullptr || str2_data == nullptr) {
+		return nullptr;
+	}
+	size_t size = str1_len + 1 + str2_len + 1;
+
+	wchar_t* key = (wchar_t*)alifMem_dataAlloc(size);
+	if (key == nullptr) {
+		return nullptr;
+	}
+
+	//wcsncpy(key, str1_data, str1_len);
+	key[str1_len] = sep;
+	//wcsncpy(key + str1_len + 1, str2_data, str2_len + 1);
+	return key;
+}
+
+// in file AlifHash
+
+ union AlifHashSecretT {
+ public:
+	unsigned char uc[24];
+	class {
+	public:
+		size_t prefix;
+		size_t suffix;
+	} fnv;
+	class {
+	public:
+		uint64_t k0;
+		uint64_t k1;
+	} siphash;
+	class {
+	public:
+		unsigned char padding[16];
+		size_t suffix;
+	} djbx33a;
+	class {
+	public:
+		unsigned char padding[16];
+		size_t hashsalt;
+	} expat;
+} ;
+
+// Export for '_elementtree' shared extension
+extern AlifHashSecretT _alifHashSecret_;
+
+static AlifHashFuncDef _alifHashFunc_;
+
+#  define ROTATE(x, b)  _rotl64(x, b)
+
+#define HALF_ROUND(a,b,c,d,s,t)     \
+    a += b; c += d;                 \
+    b = ROTATE(b, s) ^ a;           \
+    d = ROTATE(d, t) ^ c;           \
+    a = ROTATE(a, 32);
+
+#define SINGLE_ROUND(v0,v1,v2,v3)   \
+    HALF_ROUND(v0,v1,v2,v3,13,16);  \
+    HALF_ROUND(v2,v1,v0,v3,17,21);
+
+#define DOUBLE_ROUND(v0,v1,v2,v3)   \
+    SINGLE_ROUND(v0,v1,v2,v3);      \
+    SINGLE_ROUND(v0,v1,v2,v3);
+
+
+static uint64_t
+siphash13(uint64_t k0, uint64_t k1, const void* src, int64_t src_sz) {
+	uint64_t b = (uint64_t)src_sz << 56;
+	const uint8_t* in = (const uint8_t*)src;
+
+	uint64_t v0 = k0 ^ 0x736f6d6570736575ULL;
+	uint64_t v1 = k1 ^ 0x646f72616e646f6dULL;
+	uint64_t v2 = k0 ^ 0x6c7967656e657261ULL;
+	uint64_t v3 = k1 ^ 0x7465646279746573ULL;
+
+	uint64_t t;
+	uint8_t* pt;
+
+	while (src_sz >= 8) {
+		uint64_t mi;
+		memcpy(&mi, in, sizeof(mi));
+		mi = (uint64_t)(mi);
+		in += sizeof(mi);
+		src_sz -= sizeof(mi);
+		v3 ^= mi;
+		SINGLE_ROUND(v0, v1, v2, v3);
+		v0 ^= mi;
+	}
+
+	t = 0;
+	pt = (uint8_t*)&t;
+	switch (src_sz) {
+	case 7: pt[6] = in[6]; ALIFFALLTHROUGH;
+	case 6: pt[5] = in[5]; ALIFFALLTHROUGH;
+	case 5: pt[4] = in[4]; ALIFFALLTHROUGH;
+	case 4: memcpy(pt, in, sizeof(uint32_t)); break;
+	case 3: pt[2] = in[2]; ALIFFALLTHROUGH;
+	case 2: pt[1] = in[1]; ALIFFALLTHROUGH;
+	case 1: pt[0] = in[0]; break;
+	}
+	b |= (uint64_t)(t);
+
+	v3 ^= b;
+	SINGLE_ROUND(v0, v1, v2, v3);
+	v0 ^= b;
+	v2 ^= 0xff;
+	SINGLE_ROUND(v0, v1, v2, v3);
+	SINGLE_ROUND(v0, v1, v2, v3);
+	SINGLE_ROUND(v0, v1, v2, v3);
+
+	/* modified */
+	t = (v0 ^ v1) ^ (v2 ^ v3);
+	return t;
+}
+
+
+size_t alif_HashBytes(const void* src, int64_t len)
+{
+	size_t x;
+
+	if (len == 0) {
+		return 0;
+	}
+
+//#ifdef ALIF_HASH_STATS
+	//hashstats[(len <= ALIFHASH_STATS_MAX) ? len : 0]++;
+//#endif
+
+#if ALIF_HASH_CUTOFF > 0
+	if (len < ALIF_HASH_CUTOFF) {
+		size_t hash;
+		const unsigned char* p = src;
+		hash = 5381;
+
+		switch (len) {
+		case 7: hash = ((hash << 5) + hash) + *p++; ALIFFALLTHROUGH;
+		case 6: hash = ((hash << 5) + hash) + *p++; ALIFFALLTHROUGH;
+		case 5: hash = ((hash << 5) + hash) + *p++; ALIFFALLTHROUGH;
+		case 4: hash = ((hash << 5) + hash) + *p++; ALIFFALLTHROUGH;
+		case 3: hash = ((hash << 5) + hash) + *p++; ALIFFALLTHROUGH;
+		case 2: hash = ((hash << 5) + hash) + *p++; ALIFFALLTHROUGH;
+		case 1: hash = ((hash << 5) + hash) + *p++; break;
+		default:
+			ALIF_UNREACHABLE();
 		}
-		if (wcscmp(name, entry->name) == 0) {
-			if (alias != NULL) {
-				*alias = entry->orig;
-			}
-			return true;
+		hash ^= len;
+		hash ^= (Py_uhash_t)_Py_HashSecret.djbx33a.suffix;
+		x = (Py_hash_t)hash;
+	}
+	else
+#endif /
+		x = _alifHashFunc_.hash(src, len);
+
+	if (x == -1)
+		return -2;
+	return x;
+}
+
+class AlifHashFuncDef {
+public:
+	size_t(* const hash)(const void*, int64_t);
+	const char* name;
+	const int hash_bits;
+	const int seed_bits;
+} ;
+
+static size_t
+pysiphash(const void* src, int64_t src_sz) {
+	return (size_t)siphash13(
+		(uint64_t)(_alifHashSecret_.siphash.k0), (uint64_t)(_alifHashSecret_.siphash.k1),
+		src, src_sz);
+}
+
+static AlifHashFuncDef _alifHashFunc_ = { pysiphash, "siphash13", 64, 128 };
+
+
+static size_t hashtable_hashStr(const void* key)
+{
+	return alif_HashBytes(key, strlen((const char*)key));
+}
+
+static int hashtable_compareStr(const void* key1, const void* key2)
+{
+	return strcmp((const char*)key1, (const char*)key2) == 0;
+}
+
+static void hashtable_destroyStr(void* ptr)
+{
+	alifMem_dataFree(ptr);
+}
+
+class HashtableNextMatchDefData {
+public:
+	AlifModuleDef* def;
+	class ExtensionsCacheValue* matched;
+};
+
+static int extensions_cache_init(void)
+{
+	AlifHashTableAllocatorT alloc = { alifMem_objAlloc, alifMem_objFree };
+	EXTENSIONS.hashtable = _Py_hashtable_new_full(
+		hashtable_hashStr,
+		hashtable_compareStr,
+		hashtable_destroyStr,  // key
+		(AlifHashTableDestroyFunc)del_extensions_cache_value,  // value
+		&alloc
+	);
+	if (EXTENSIONS.hashtable == NULL) {
+		return -1;
+	}
+	return 0;
+}
+
+static AlifHashTableEntryT* extensionsCache_findUnlocked(AlifObject* path, AlifObject* name,
+	void** p_key)
+{
+	if (EXTENSIONS.hashtable == NULL) {
+		return NULL;
+	}
+	void* key = hashTable_keyFrom_2Strings(path, name, ':');
+	if (key == NULL) {
+		return NULL;
+	}
+	AlifHashTableEntryT* entry = EXTENSIONS.hashtable->getEntryFunc(EXTENSIONS.hashtable, key);
+	if (p_key != NULL) {
+		*p_key = key;
+	}
+	else {
+		hashtable_destroyStr(key);
+	}
+	return entry;
+}
+
+static class ExtensionsCacheValue* extensions_cacheGet(AlifObject* path, AlifObject* name)
+{
+	class ExtensionsCacheValue* value = NULL;
+	extensions_lock_acquire();
+
+	AlifHashTableEntryT* entry =
+		extensionsCache_findUnlocked(path, name, NULL);
+	if (entry == NULL) {
+		goto finally;
+	}
+	value = (class ExtensionsCacheValue*)entry->value;
+
+	finally:
+	extensions_lock_release();
+	return value;
+}
+
+/* This can only fail with "out of memory". */
+static struct extensions_cache_value* extensions_cache_set(AlifObject* path, AlifObject* name,
+	AlifModuleDef* def, AlifModInitFunction m_init,
+	int64_t m_index, AlifObject* m_dict,
+	AlifExtModuleOrigin origin, void* md_gil)
+{
+	struct extensions_cache_value* value = NULL;
+	void* key = NULL;
+	struct extensions_cache_value* newvalue = NULL;
+	AlifModuleDefBase olddefbase = def->base;
+	AlifHashTableEntryT* entry{};
+	extensions_lock_acquire();
+
+	if (EXTENSIONS.hashtable == NULL) {
+		if (extensions_cache_init() < 0) {
+			goto finally;
 		}
 	}
+
+	entry =
+		extensionsCache_findUnlocked(path, name, &key);
+	value = entry == NULL
+		? NULL
+		: (class ExtensionsCacheValue*)entry->value;
+	if (value != NULL) {
+		goto finally;
+	}
+	newvalue = alloc_extensions_cache_value();
+	if (newvalue == NULL) {
+		goto finally;
+	}
+
+	/* Populate the new cache value data. */
+	*newvalue = (class ExtensionsCacheValue){
+		def,
+		m_init,
+		m_index,
+		origin,
+//#ifdef ALIF_GIL_DISABLED
+		//md_gil,
+//#endif
+	};
+//#ifndef ALIF_GIL_DISABLED
+	//(void)md_gil;
+//#endif
+	if (init_cached_m_dict(newvalue, m_dict) < 0) {
+		goto finally;
+	}
+	fixup_cached_def(newvalue);
+
+	if (entry == NULL) {
+		if (_Py_hashtable_set(EXTENSIONS.hashtable, key, newvalue) < 0) {
+			goto finally;
+		}
+		key = NULL;
+	}
+	else if (value == NULL) {
+		entry->value = newvalue;
+	}
+	else {
+		//ALIF_UNREACHABLE();
+	}
+
+	value = newvalue;
+
+	finally:
+	if (value == NULL) {
+		restore_old_cached_def(def, &olddefbase);
+		if (newvalue != NULL) {
+			del_extensions_cache_value(newvalue);
+		}
+	}
+	else {
+		cleanup_old_cached_def(&olddefbase);
+	}
+
+	extensions_lock_release();
+	if (key != NULL) {
+		hashtable_destroyStr(key);
+	}
+
+	return value;
 }
+
+
+static bool check_multi_interp_extensions(AlifInterpreter* interp) // 1444
+{
+	int override = (interp->imports.overrideMultiInterpExtensionsCheck);
+	if (override < 0) {
+		return false;
+	}
+	else if (override > 0) {
+		return true;
+	}
+	else if (alifInterpreterState_hasFeature(
+		interp, 1UL << 8)) {
+		return true;
+	}
+	return false;
+}
+
+int alifImport_checkSubinterpIncompatibleExtensionAllowed(const wchar_t* name)
+{
+	AlifInterpreter* interp = alifInterpreter_get();
+	if (check_multi_interp_extensions(interp)) {
+		return -1;
+	}
+	return 0;
+}
+
+static AlifThread* switchTo_mainInterpreter(AlifThread* tstate)
+{
+	if ((tstate->interpreter == _alifDureRun_.interpreters.main)) {
+		return tstate;
+	}
+	//AlifThread* main_tstate = alifThreadState_NewBound(
+		//tstate->interpreter == _alifDureRun_.interpreters.main, alifThreadState_WHENCE_EXEC);
+	//if (main_tstate == NULL) {
+		//return NULL;
+	//}
+#ifndef NDEBUG
+	//AlifThread* old_tstate = alifThreadState_Swap(main_tstate);
+#else
+	//(void)ThreadState_Swap(main_tstate);
+#endif
+	//return main_tstate;
+}
+
+static AlifObject* getCore_moduleDict(AlifInterpreter* interp, AlifObject* name, AlifObject* path)
+{
+	if (path == name) {
+		//if (alifUnicode_CompareWithASCIIString(name, "sys") == 0) {
+			//return ALIF_NEWREF(interp->sysdictCopy);
+		//}
+		//if (alifUnicode_CompareWithASCIIString(name, "builtins") == 0) {
+			//return ALIF_NEWREF(interp->builtinsCopy);
+		//}
+	}
+	return NULL;
+}
+
+
+class SinglephaseGlobalUpdate {
+public:
+	AlifModInitFunction init;
+	int64_t index;
+	AlifObject* dict;
+	AlifExtModuleOrigin origin;
+};
+
+static class ExtensionsCacheValue* updateGlobal_state_forExtension(AlifThread* tstate,
+	AlifObject* path, AlifObject* name,
+	AlifModuleDef* def,
+	SinglephaseGlobalUpdate* singlephase)
+{
+	class ExtensionsCacheValue* cached = nullptr;
+	AlifModInitFunction m_init = nullptr;
+	AlifObject* m_dict = nullptr;
+
+	/* Set up for _extensions_cache_set(). */
+	if (singlephase == nullptr) {
+	}
+	else {
+		if (singlephase->init != nullptr) {
+			m_init = singlephase->init;
+		}
+		else if (singlephase->dict == nullptr) {
+		}
+		else {
+			m_dict = singlephase->dict;
+		}
+	}
+
+	if ((tstate->interpreter == _alifDureRun_.interpreters.main) || def->size == -1) {
+//#ifndef NDEBUG
+		//cached = extensions_cacheGet(path, name);
+//#endif
+		cached = extensions_cacheSet(
+			path, name, def, m_init, singlephase->index, m_dict,
+			singlephase->origin, nullptr);
+		if (cached == nullptr) {
+			return nullptr;
+		}
+	}
+
+	return cached;
+}
+
+static int finish_singlePhase_extension(AlifThread* tstate, AlifObject* mod,
+	class ExtensionsCacheValue* cached,
+	AlifObject* name, AlifObject* modules)
+{
+
+	int64_t index = ((ExtensionsCacheValue*)cached)->index;
+	if (modules_byIndex_set(tstate->interpreter, index, mod) < 0) {
+		return -1;
+	}
+
+	if (modules != nullptr) {
+		if (alifObject_setItem(modules, name, mod) < 0) {
+			return -1;
+		}
+	}
+
+	return 0;
+}
+
+
+static AlifObject* reload_singlephase_extension(AlifThread* tstate, // 1760
+	class ExtensionsCacheValue* cached,
+	class AlifExtModuleLoaderInfo* info)
+{
+	AlifModuleDef* def = cached->def;
+	AlifObject* mod = NULL;
+
+	const wchar_t* name_buf = alifUStr_asUTF8(info->name);
+	if (alifImport_checkSubinterpIncompatibleExtensionAllowed(name_buf) < 0) {
+		return NULL;
+	}
+
+	AlifObject* modules = get_modules_dict(tstate, true);
+	if (def->size == -1) {
+
+		AlifObject* copy = getCached_mDict(cached, info->name, info->path);
+		if (copy == NULL) {
+			return NULL;
+		}
+		mod = import_addModule(tstate, info->name);
+		if (mod == NULL) {
+			ALIF_DECREF(copy);
+			return NULL;
+		}
+		AlifObject* mdict = alifModule_getDict(mod);
+		if (mdict == NULL) {
+			ALIF_DECREF(copy);
+			ALIF_DECREF(mod);
+			return NULL;
+		}
+		int rc = alifDict_update(mdict, copy);
+		ALIF_DECREF(copy);
+		if (rc < 0) {
+			ALIF_DECREF(mod);
+			return NULL;
+		}
+	}
+	//#ifdef ALIF_GIL_DISABLED
+			//if (def->base.copy != NULL) {
+				//((AlifModuleObject*)mod)->gil = cached->gil;
+			//}
+	//#endif
+		//}
+		//else {
+	AlifModInitFunction p0 = def->base.init;
+	if (p0 == NULL) {
+		return NULL;
+	}
+	class AlifExtModuleLoaderResult res { 0 };
+	//if (alifImport_RunModInitFunc(p0, info, &res) < 0) {
+		//alif_ext_module_loader_result_apply_error(&res, name_buf);
+		//return NULL;
+	//}
+	mod = res.module_;
+
+	//res = 0;
+
+	if (info->filename != NULL) {
+		if (alifModule_addObjectRef(mod, L"__file__", info->filename) < 0) {
+			// return error
+		}
+	}
+
+	if (alifObject_setItem(modules, info->name, mod) == -1) {
+		ALIF_DECREF(mod);
+		return NULL;
+	}
+	//}
+
+	int64_t index = (cached->index);
+	if (modules_byIndex_set(tstate->interpreter, index, mod) < 0) {
+		alifObject_delItem(modules, info->name);
+		ALIF_DECREF(mod);
+		return NULL;
+	}
+
+	return mod;
+}
+
+static AlifObject* import_find_extension(AlifThread* tstate,
+	class AlifExtModuleLoaderInfo* info,
+	class ExtensionsCacheValue** p_cached)
+{
+	class ExtensionsCacheValue* cached
+		= extensions_cacheGet(info->path, info->name);
+	if (cached == NULL) {
+		return NULL;
+	}
+
+	*p_cached = cached;
+
+
+	const wchar_t* name_buf = alifUStr_asUTF8(info->name);
+	if (alifImport_checkSubinterpIncompatibleExtensionAllowed(name_buf) < 0) {
+		return NULL;
+	}
+
+	AlifObject* mod = reload_singlephase_extension(tstate, cached, info);
+	if (mod == NULL) {
+		return NULL;
+	}
+
+	//int verbose = alifInterpreterState_getConfig(tstate->interp)->verbose;
+
+	return mod;
+}
+
+
+static AlifObject* import_run_extension(AlifThread* tstate, AlifModInitFunction p0, // 1908
+	class AlifExtModuleLoaderInfo* info,
+	AlifObject* spec, AlifObject* modules)
+{
+
+	AlifObject* mod = NULL;
+	AlifModuleDef* def = NULL;
+	class ExtensionsCacheValue* cached = NULL;
+	const wchar_t* name_buf = ALIFWBYTES_AS_STRING(info->nameEncoded);
+	bool switched = false;
+	AlifThread* main_tstate = switchTo_mainInterpreter(tstate);
+	if (main_tstate == NULL) {
+		return NULL;
+	}
+	else if (main_tstate != tstate) {
+		switched = true;
+	}
+
+	class AlifExtModuleLoaderResult res;
+	int rc = alifImport_runModInitFunc(p0, info, &res);
+	if (rc < 0) {
+
+	}
+	else {
+
+		mod = res.module_;
+		res.module_ = NULL;
+		def = res.def;
+
+		if (res.kind == AlifExt_Module_Kind_Singlephase) {
+			if (info->filename != NULL) {
+				AlifObject* filename = NULL;
+				if (switched) {
+
+					//filename = AlifUStr_copy(info->filename);
+					if (filename == NULL) {
+						return NULL;
+					}
+				}
+				else {
+					filename = ALIF_NEWREF(info->filename);
+				}
+
+				AlifInterpreter* interp = alifInterpreter_get();
+				//alifUStr_internImmortal(interp, &filename);
+
+				if (alifModule_addObjectRef(mod, L"__file__", filename) < 0) {
+					return nullptr;
+				}
+			}
+
+			class SinglephaseGlobalUpdate singlephase = {
+				nullptr,
+				def->base.index,
+				nullptr,
+				info->origin,
+
+			};
+
+			if (def->size == -1) {
+
+				singlephase.dict = alifModule_getDict(mod);
+			}
+			else {
+				singlephase.init = p0;
+			}
+			cached = updateGlobal_state_forExtension(
+				tstate, info->path, info->name, def, &singlephase);
+			if (cached == NULL) {
+				goto main_finally;
+			}
+		}
+	}
+
+main_finally:
+	if (switched) {
+		//switch_back_from_main_interpreter(tstate, main_tstate, mod);
+		mod = NULL;
+	}
+
+	if (rc < 0) {
+		//alifExt_module_loader_result_apply_error(&res, name_buf);
+		goto error;
+	}
+
+	if (res.kind == AlifExt_Module_Kind_Multiphase) {
+		mod = ALIFMODULE_FROMDEFANDSPEC(def, spec);
+		if (mod == NULL) {
+			goto error;
+		}
+	}
+	else {
+		if (alifImport_checkSubinterpIncompatibleExtensionAllowed(name_buf) < 0) {
+			goto error;
+		}
+
+		if (switched) {
+			mod = reload_singlephase_extension(tstate, cached, info);
+			if (mod == NULL) {
+				goto error;
+			}
+		}
+		else {
+			AlifObject* modules = get_modules_dict(tstate, true);
+			if (finish_singlePhase_extension(
+				tstate, mod, cached, info->name, modules) < 0)
+			{
+				goto error;
+			}
+		}
+	}
+
+	//res = (class AlifExtModuleLoaderResult)(0);
+	return mod;
+
+error:
+	ALIF_XDECREF(mod);
+	//res = (class AlifExtModuleLoaderResult)(0);
+	return NULL;
+}
+
+/*******************/
+/* builtin modules */
+/*******************/
+
+int alifImport_fixupBuiltin(AlifThread* _tState, AlifObject* _mod, const wchar_t* _name, // 2180
+	AlifObject* _modules)
+{
+	int res_ = -1;
+	class ExtensionsCacheValue* cached_{};
+	AlifObject* nameObj;
+	nameObj = alifUStr_fromString(_name);
+	if (nameObj == nullptr) {
+		return -1;
+	}
+
+	AlifModuleDef* def_ = alifModule_getDef(_mod);
+	if (def_ == nullptr) {
+		goto finally;
+	}
+
+	cached_ = extensions_cacheGet(nameObj, nameObj);
+	if (cached_ == nullptr) {
+		class SinglephaseGlobalUpdate singlephase = {
+			0,
+			def_->base.index,
+			nullptr,
+			AlifExt_Module_Origin_Core,
+		};
+		cached_ = updateGlobal_state_forExtension(
+			_tState, nameObj, nameObj, def_, &singlephase);
+		if (cached_ == nullptr) {
+			goto finally;
+		}
+	}
+
+	if (finish_singlePhase_extension(_tState, _mod, cached_, nameObj, _modules) < 0) {
+		goto finally;
+	}
+
+	res_ = 0;
+
+	finally:
+	ALIF_DECREF(nameObj);
+	return res_;
+}
+
+static AlifObject* create_builtin(AlifThread* tstate, AlifObject* name, AlifObject* spec)
+{
+	class AlifExtModuleLoaderInfo info;
+	//if (alifExt_module_loader_info_init_for_builtin(&info, name) < 0) {
+		//return NULL;
+	//}
+	class InitTable* found{};
+	AlifModInitFunction p0{};
+	class ExtensionsCacheValue* cached = NULL;
+	AlifObject* mod = import_find_extension(tstate, &info, &cached);
+	if (mod != NULL) {
+		goto finally;
+	}
+
+	//if (cached != NULL) {
+		//_extensions_cache_delete(info.path, info.name);
+	//}
+
+	found = NULL;
+	//for (class InitTable* p = INITTABLE; p->name != NULL; p++) {
+		//if (alifUnicode_EqualToASCIIString(info.name, p->name)) {
+			//found = p;
+		//}
+	//}
+	if (found == NULL) {
+		// not found
+		mod = ALIF_NEWREF(ALIF_NONE);
+		goto finally;
+	}
+
+	p0 = (AlifModInitFunction)found->initFunc;
+	if (p0 == NULL) {
+		mod = import_addModule(tstate, info.name);
+		goto finally;
+	}
+
+	//#ifdef ALIF_GIL_DISABLED
+		//alifEval_EnableGILTransient(tstate);
+	//#endif
+		/* Now load it. */
+	mod = import_run_extension(
+		tstate, p0, &info, spec, get_modules_dict(tstate, true));
+	//#ifdef ALIF_GIL_DISABLED
+		//if (alifImport_CheckGILForModule(mod, info.name) < 0) {
+			//ALIF_CLEAR(mod);
+			//goto finally;
+		//}
+	//#endif
+
+	finally:
+	//&info;
+	return mod;
+}
+
 
 static AlifObject* moduleDict_forExec(AlifThread* tstate, AlifObject* name)
 {
@@ -350,6 +1179,7 @@ static AlifObject* moduleDict_forExec(AlifThread* tstate, AlifObject* name)
 	return d;
 }
 
+
 static AlifObject* execCode_inModule(AlifThread* tstate, AlifObject* name,
 	AlifObject* module_dict, AlifObject* code_object)
 {
@@ -368,6 +1198,25 @@ static AlifObject* execCode_inModule(AlifThread* tstate, AlifObject* name,
 	return m;
 }
 
+
+static bool resolve_module_alias(const wchar_t* name, const class ModuleAlias* aliases,
+	const wchar_t** alias)
+{
+	const class ModuleAlias* entry;
+	for (entry = aliases; ; entry++) {
+		if (entry->name == NULL) {
+			/* It isn't an alias. */
+			return false;
+		}
+		if (wcscmp(name, entry->name) == 0) {
+			if (alias != NULL) {
+				*alias = entry->orig;
+			}
+			return true;
+		}
+	}
+}
+
 static bool use_frozen(void)
 {
 	AlifInterpreter* interp = alifInterpreter_get();
@@ -382,6 +1231,7 @@ static bool use_frozen(void)
 		//return interp->config.useFrozenModules; // سيتم اضافته لاحقا
 	}
 }
+
 
 enum FrozenStatus {
 	Frozen_Okay,
@@ -676,176 +1526,6 @@ static int init_importlib(AlifThread* tstate, AlifObject* sysmod)
 	return 0;
 }
 
-AlifObject* alifImport_addModuleRef(const wchar_t* _name)
-{
-	AlifObject* nameObj = alifUStr_fromString(_name);
-	if (nameObj == nullptr) {
-		return nullptr;
-	}
-	AlifThread* tstate = alifThread_get();
-	AlifObject* module_ = import_addModule(tstate, nameObj);
-	ALIF_DECREF(nameObj);
-	return module_;
-}
-
-typedef AlifObject* (*AlifModInitFunction)(void);
-
-static inline void extensions_lock_acquire()
-{
-	ALIFMUTEX_LOCK(&_alifDureRun_.imports.extensions.mutex);
-}
-
-static inline void extensions_lock_release()
-{
-	ALIFMUTEX_UNLOCK(&_alifDureRun_.imports.extensions.mutex);
-}
-
-static AlifThread* switchTo_mainInterpreter(AlifThread* tstate)
-{
-	if ((tstate->interpreter == _alifDureRun_.interpreters.main)) {
-		return tstate;
-	}
-	//AlifThread* main_tstate = alifThreadState_NewBound(
-		//tstate->interpreter == _alifDureRun_.interpreters.main, alifThreadState_WHENCE_EXEC);
-	//if (main_tstate == NULL) {
-		//return NULL;
-	//}
-#ifndef NDEBUG
-	//AlifThread* old_tstate = alifThreadState_Swap(main_tstate);
-#else
-	//(void)ThreadState_Swap(main_tstate);
-#endif
-	//return main_tstate;
-}
-
-class SinglephaseGlobalUpdate {
-public:
-	AlifModInitFunction init;
-	int64_t index;
-	AlifObject* dict;
-	AlifExtModuleOrigin origin;
-};
-
-typedef class CachedMDict {
-public:
-	AlifObject* copied;
-	int64_t interpid;
-} ;
-
-class ExtensionsCacheValue {
-public:
-	AlifModuleDef* def;
-	AlifModInitFunction init;
-	int64_t index;
-	CachedMDict* dict;
-	CachedMDict Mdict;
-
-	AlifExtModuleOrigin origin;
-};
-
-static AlifObject* getCore_moduleDict( AlifInterpreter* , AlifObject* , AlifObject* );
-
-static AlifObject*
-getCached_mDict(class ExtensionsCacheValue* value,
-	AlifObject* name, AlifObject* path) // 1120
-{
-	AlifInterpreter* interp = alifInterpreter_get();
-	if (value->origin == AlifExt_Module_Origin_Core) {
-		return getCore_moduleDict(interp, name, path);
-	}
-	AlifObject* dict = value->def->base.copy;
-	ALIF_XINCREF(dict);
-	return dict;
-}
-
-static void* hashTable_keyFrom_2Strings(AlifObject* str1, AlifObject* str2, const wchar_t sep)
-{
-	int64_t str1_len, str2_len;
-	const wchar_t* str1_data = alifUStr_asUTF8AndSize(str1, &str1_len);
-	const wchar_t* str2_data = alifUStr_asUTF8AndSize(str2, &str2_len);
-	if (str1_data == nullptr || str2_data == nullptr) {
-		return nullptr;
-	}
-	size_t size = str1_len + 1 + str2_len + 1;
-
-	wchar_t* key = (wchar_t*)alifMem_dataAlloc(size);
-	if (key == nullptr) {
-		return nullptr;
-	}
-
-	//wcsncpy(key, str1_data, str1_len);
-	key[str1_len] = sep;
-	//wcsncpy(key + str1_len + 1, str2_data, str2_len + 1);
-	return key;
-}
-
-static void hashTable_destroyStr(void* ptr)
-{
-	alifMem_dataFree(ptr);
-}
-
-static AlifHashTableEntryT* extensionsCache_findUnlocked(AlifObject* path, AlifObject* name,
-	void** p_key)
-{
-	if (EXTENSIONS.hashtable == NULL) {
-		return NULL;
-	}
-	void* key = hashTable_keyFrom_2Strings(path, name, ':');
-	if (key == NULL) {
-		return NULL;
-	}
-	AlifHashTableEntryT* entry = EXTENSIONS.hashtable->getEntryFunc(EXTENSIONS.hashtable, key);
-	if (p_key != NULL) {
-		*p_key = key;
-	}
-	else {
-		hashTable_destroyStr(key);
-	}
-	return entry;
-}
-
-static class ExtensionsCacheValue* extensions_cache_get(AlifObject* path, AlifObject* name)
-{
-	class ExtensionsCacheValue* value = NULL;
-	extensions_lock_acquire();
-
-	AlifHashTableEntryT* entry =
-		extensionsCache_findUnlocked(path, name, NULL);
-	if (entry == NULL) {
-		goto finally;
-	}
-	value = (class ExtensionsCacheValue*)entry->value;
-
-	finally:
-	extensions_lock_release();
-	return value;
-}
-
-static bool check_multi_interp_extensions(AlifInterpreter* interp) // 1444
-{
-	int override = (interp->imports.overrideMultiInterpExtensionsCheck);
-	if (override < 0) {
-		return false;
-	}
-	else if (override > 0) {
-		return true;
-	}
-	else if (alifInterpreterState_hasFeature(
-		interp, 1UL << 8)) {
-		return true;
-	}
-	return false;
-}
-
-int alifImport_checkSubinterpIncompatibleExtensionAllowed(const wchar_t* name)
-{
-	AlifInterpreter* interp = alifInterpreter_get();
-	if (check_multi_interp_extensions(interp)) {
-		return -1;
-	}
-	return 0;
-}
-
 //static class ExtensionsCacheValue* extensions_cacheSet(AlifObject* path, AlifObject* name,
 //	AlifModuleDef* def, AlifModInitFunction m_init,
 //	int64_t m_index, AlifObject* m_dict,
@@ -928,443 +1608,9 @@ int alifImport_checkSubinterpIncompatibleExtensionAllowed(const wchar_t* name)
 //	return value;
 //}
 
-static AlifObject* getCore_moduleDict(AlifInterpreter* interp, AlifObject* name, AlifObject* path)
-{
-	if (path == name) {
-		//if (alifUnicode_CompareWithASCIIString(name, "sys") == 0) {
-			//return ALIF_NEWREF(interp->sysdictCopy);
-		//}
-		//if (alifUnicode_CompareWithASCIIString(name, "builtins") == 0) {
-			//return ALIF_NEWREF(interp->builtinsCopy);
-		//}
-	}
-	return NULL;
-}
-
-static class ExtensionsCacheValue* updateGlobal_state_forExtension(AlifThread* tstate,
-	AlifObject* path, AlifObject* name,
-	AlifModuleDef* def,
-	 SinglephaseGlobalUpdate* singlephase)
-{
-	class ExtensionsCacheValue* cached = nullptr;
-	AlifModInitFunction m_init = nullptr;
-	AlifObject* m_dict = nullptr;
-
-	/* Set up for _extensions_cache_set(). */
-	if (singlephase == nullptr) {
-	}
-	else {
-		if (singlephase->init != nullptr) {
-			m_init = singlephase->init;
-		}
-		else if (singlephase->dict == nullptr) {
-		}
-		else {
-			m_dict = singlephase->dict;
-		}
-	}
-
-	//if (alif_isMainInterpreter(tstate->interpreter) || def->size == -1) {
-//#ifndef NDEBUG
-		//cached = extensions_cacheGet(path, name);
-//#endif
-		//cached = extensions_cacheSet(
-			//path, name, def, m_init, singlephase->index, m_dict,
-			//singlephase->origin, nullptr);
-		//if (cached == nullptr) {
-			//return nullptr;
-		//}
-	//}
-
-	return cached;
-}
 
 
-static AlifHashTableEntryT* extensions_cacheFind_unlocked(AlifObject* path, AlifObject* name,
-	void** p_key)
-{
-	if (EXTENSIONS.hashtable == nullptr) {
-		return nullptr;
-	}
-	void* key = hashTable_keyFrom_2Strings(path, name, ' : ');
-	if (key == nullptr) {
-		return nullptr;
-	}
-	AlifHashTableEntryT* entry = alifHashTable_getEntry(EXTENSIONS.hashtable, key);
-	if (p_key != nullptr) {
-		*p_key = key;
-	}
-	else {
-		hashTable_destroyStr(key);
-	}
-	return entry;
-}
 
-static class ExtensionsCacheValue* extensions_cacheGet(AlifObject* _path, AlifObject* _name)
-{
-	class ExtensionsCacheValue* value = nullptr;
-	extensions_lock_acquire();
-
-	AlifHashTableEntryT* entry =
-		extensions_cacheFind_unlocked(_path, _name, nullptr);
-	if (entry == nullptr) {
-		/* It was never added. */
-		goto finally;
-	}
-	value = (class ExtensionsCacheValue*)entry->value;
-
-	finally:
-	extensions_lock_release();
-	return value;
-}
-
-static AlifObject* reload_singlephase_extension(AlifThread* tstate, // 1760
-	class ExtensionsCacheValue* cached,
-	class AlifExtModuleLoaderInfo* info)
-{
-	AlifModuleDef* def = cached->def;
-	AlifObject* mod = NULL;
-
-	const wchar_t* name_buf = alifUStr_asUTF8(info->name);
-	if (alifImport_checkSubinterpIncompatibleExtensionAllowed(name_buf) < 0) {
-		return NULL;
-	}
-
-	AlifObject* modules = get_modules_dict(tstate, true);
-	if (def->size == -1) {
-
-		AlifObject* copy = getCached_mDict(cached, info->name, info->path);
-		if (copy == NULL) {
-			return NULL;
-		}
-		mod = import_addModule(tstate, info->name);
-		if (mod == NULL) {
-			ALIF_DECREF(copy);
-			return NULL;
-		}
-		AlifObject* mdict = alifModule_getDict(mod);
-		if (mdict == NULL) {
-			ALIF_DECREF(copy);
-			ALIF_DECREF(mod);
-			return NULL;
-		}
-		int rc = alifDict_update(mdict, copy);
-		ALIF_DECREF(copy);
-		if (rc < 0) {
-			ALIF_DECREF(mod);
-			return NULL;
-		}
-	}
-//#ifdef ALIF_GIL_DISABLED
-		//if (def->base.copy != NULL) {
-			//((AlifModuleObject*)mod)->gil = cached->gil;
-		//}
-//#endif
-	//}
-	//else {
-		AlifModInitFunction p0 = def->base.init;
-		if (p0 == NULL) {
-			return NULL;
-		}
-		class AlifExtModuleLoaderResult res {0};
-		//if (alifImport_RunModInitFunc(p0, info, &res) < 0) {
-			//alif_ext_module_loader_result_apply_error(&res, name_buf);
-			//return NULL;
-		//}
-		mod = res.module_;
-
-		//res = 0;
-
-		if (info->filename != NULL) {
-			if (alifModule_addObjectRef(mod, L"__file__", info->filename) < 0) {
-				// return error
-			}
-		}
-
-		if (alifObject_setItem(modules, info->name, mod) == -1) {
-			ALIF_DECREF(mod);
-			return NULL;
-		}
-	//}
-
-	int64_t index = (cached->index);
-	if (modules_byIndex_set(tstate->interpreter, index, mod) < 0) {
-		alifObject_delItem(modules, info->name);
-		ALIF_DECREF(mod);
-		return NULL;
-	}
-
-	return mod;
-}
-
-static AlifObject* import_find_extension(AlifThread* tstate,
-	class AlifExtModuleLoaderInfo* info,
-	class ExtensionsCacheValue** p_cached)
-{
-	class ExtensionsCacheValue* cached
-		= extensions_cache_get(info->path, info->name);
-	if (cached == NULL) {
-		return NULL;
-	}
-
-	*p_cached = cached;
-
-
-	const wchar_t* name_buf = alifUStr_asUTF8(info->name);
-	if (alifImport_checkSubinterpIncompatibleExtensionAllowed(name_buf) < 0) {
-		return NULL;
-	}
-
-	AlifObject* mod = reload_singlephase_extension(tstate, cached, info);
-	if (mod == NULL) {
-		return NULL;
-	}
-
-	//int verbose = alifInterpreterState_getConfig(tstate->interp)->verbose;
-
-	return mod;
-}
-
-
-static AlifObject* import_run_extension(AlifThread* tstate, AlifModInitFunction p0, // 1908
-	class AlifExtModuleLoaderInfo* info,
-	AlifObject* spec, AlifObject* modules)
-{
-
-	AlifObject* mod = NULL;
-	AlifModuleDef* def = NULL;
-	class ExtensionsCacheValue* cached = NULL;
-	const wchar_t* name_buf = ALIFWBYTES_AS_STRING(info->nameEncoded);
-	bool switched = false;
-	AlifThread* main_tstate = switchTo_mainInterpreter(tstate);
-	if (main_tstate == NULL) {
-		return NULL;
-	}
-	else if (main_tstate != tstate) {
-		switched = true;
-	}
-
-	class AlifExtModuleLoaderResult res;
-	int rc = alifImport_runModInitFunc(p0, info, &res);
-	if (rc < 0) {
-
-	}
-	else {
-
-		mod = res.module_;
-		res.module_ = NULL;
-		def = res.def;
-
-		if (res.kind == AlifExt_Module_Kind_Singlephase) {
-			if (info->filename != NULL) {
-				AlifObject* filename = NULL;
-				if (switched) {
-
-					//filename = AlifUStr_copy(info->filename);
-					if (filename == NULL) {
-						return NULL;
-					}
-				}
-				else {
-					filename = ALIF_NEWREF(info->filename);
-				}
-
-				AlifInterpreter* interp = alifInterpreter_get();
-				//alifUStr_internImmortal(interp, &filename);
-
-				if (alifModule_addObjectRef(mod, L"__file__", filename) < 0) {
-					return nullptr;
-				}
-			}
-
-			class SinglephaseGlobalUpdate singlephase = {
-				nullptr,
-				def->base.index,
-				nullptr,
-				info->origin,
-
-			};
-
-			if (def->size == -1) {
-
-				singlephase.dict = alifModule_getDict(mod);
-			}
-			else {
-				singlephase.init = p0;
-			}
-			cached = updateGlobal_state_forExtension(
-				tstate, info->path, info->name, def, &singlephase);
-			if (cached == NULL) {
-				goto main_finally;
-			}
-		}
-	}
-
-main_finally:
-	if (switched) {
-		//switch_back_from_main_interpreter(tstate, main_tstate, mod);
-		mod = NULL;
-	}
-
-	if (rc < 0) {
-		//alifExt_module_loader_result_apply_error(&res, name_buf);
-		goto error;
-	}
-
-	if (res.kind == AlifExt_Module_Kind_Multiphase) {
-		mod = ALIFMODULE_FROMDEFANDSPEC(def, spec);
-		if (mod == NULL) {
-			goto error;
-		}
-	}
-	else {
-		if (alifImport_checkSubinterpIncompatibleExtensionAllowed(name_buf) < 0) {
-			goto error;
-		}
-
-		if (switched) {
-			mod = reload_singlephase_extension(tstate, cached, info);
-			if (mod == NULL) {
-				goto error;
-			}
-		}
-		else {
-			AlifObject* modules = get_modules_dict(tstate, true);
-			if (finish_singlePhase_extension(
-				tstate, mod, cached, info->name, modules) < 0)
-			{
-				goto error;
-			}
-		}
-	}
-
-	//res = (class AlifExtModuleLoaderResult)(0);
-	return mod;
-
-error:
-	ALIF_XDECREF(mod);
-	//res = (class AlifExtModuleLoaderResult)(0);
-	return NULL;
-}
-
-static int finish_singlePhase_extension(AlifThread* tstate, AlifObject* mod,
-	class ExtensionsCacheValue* cached,
-	AlifObject* name, AlifObject* modules)
-{
-
-	int64_t index = ((ExtensionsCacheValue*)cached)->index;
-	if (modules_byIndex_set(tstate->interpreter, index, mod) < 0) {
-		return -1;
-	}
-
-	if (modules != nullptr) {
-		if (alifObject_setItem(modules, name, mod) < 0) {
-			return -1;
-		}
-	}
-
-	return 0;
-}
-
-/*******************/
-/* builtin modules */
-/*******************/
-
-int alifImport_fixupBuiltin(AlifThread* _tState, AlifObject* _mod, const wchar_t* _name, // 2180
-	AlifObject* _modules)
-{
-	int res_ = -1;
-	class ExtensionsCacheValue* cached_{};
-	AlifObject* nameObj;
-	nameObj = alifUStr_fromString(_name);
-	if (nameObj == nullptr) {
-		return -1;
-	}
-
-	AlifModuleDef* def_ = alifModule_getDef(_mod);
-	if (def_ == nullptr) {
-		goto finally;
-	}
-
-	cached_ = extensions_cacheGet(nameObj, nameObj);
-	if (cached_ == nullptr) {
-		class SinglephaseGlobalUpdate singlephase = {
-			0,
-			def_->base.index,
-			nullptr,
-			AlifExt_Module_Origin_Core,
-		};
-		cached_ = updateGlobal_state_forExtension(
-			_tState, nameObj, nameObj, def_, &singlephase);
-		if (cached_ == nullptr) {
-			goto finally;
-		}
-	}
-
-	if (finish_singlePhase_extension(_tState, _mod, cached_, nameObj, _modules) < 0) {
-		goto finally;
-	}
-
-	res_ = 0;
-
-	finally:
-	ALIF_DECREF(nameObj);
-	return res_;
-}
-
-static AlifObject* create_builtin(AlifThread* tstate, AlifObject* name, AlifObject* spec)
-{
-	class AlifExtModuleLoaderInfo info;
-	//if (alifExt_module_loader_info_init_for_builtin(&info, name) < 0) {
-		//return NULL;
-	//}
-	class InitTable* found{};
-	AlifModInitFunction p0{};
-	class ExtensionsCacheValue* cached = NULL;
-	AlifObject* mod = import_find_extension(tstate, &info, &cached);
-	if (mod != NULL) {
-		goto finally;
-	}
-
-	//if (cached != NULL) {
-		//_extensions_cache_delete(info.path, info.name);
-	//}
-
-	found = NULL;
-	//for (class InitTable* p = INITTABLE; p->name != NULL; p++) {
-		//if (alifUnicode_EqualToASCIIString(info.name, p->name)) {
-			//found = p;
-		//}
-	//}
-	if (found == NULL) {
-		// not found
-		mod = ALIF_NEWREF(ALIF_NONE);
-		goto finally;
-	}
-
-	 p0 = (AlifModInitFunction)found->initFunc;
-	if (p0 == NULL) {
-		mod = import_addModule(tstate, info.name);
-		goto finally;
-	}
-
-//#ifdef ALIF_GIL_DISABLED
-	//alifEval_EnableGILTransient(tstate);
-//#endif
-	/* Now load it. */
-	mod = import_run_extension(
-		tstate, p0, &info, spec, get_modules_dict(tstate, true));
-//#ifdef ALIF_GIL_DISABLED
-	//if (alifImport_CheckGILForModule(mod, info.name) < 0) {
-		//ALIF_CLEAR(mod);
-		//goto finally;
-	//}
-//#endif
-
-	finally:
-	//&info;
-	return mod;
-}
 
 
 AlifIntT alifImport_init() {

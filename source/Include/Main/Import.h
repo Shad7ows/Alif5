@@ -52,6 +52,7 @@ public:
 	} _err;
 };
 
+typedef AlifObject* (*AlifModInitFunction)(void);
 AlifObject* alifImport_addModuleRef(const wchar_t* );
 
 class InitTable {

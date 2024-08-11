@@ -145,6 +145,8 @@ public:
         }, \
     }
 
+const char* alifImport_swapPackageContext(const char* );
+
 AlifObject* alifImport_initModules(AlifInterpreter* );
 AlifObject* alifImport_getModules(AlifInterpreter* );
 

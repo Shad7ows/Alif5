@@ -31,7 +31,7 @@ public:
 	wchar_t* runCommand{};
 	wchar_t* runModule{};
 	wchar_t* runFilename{};
-	int installImportlib = 1;
+	int installImportlib  = 1;
 
 	AlifIntT initMain{};
 };

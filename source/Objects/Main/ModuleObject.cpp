@@ -72,6 +72,30 @@ AlifObject* alifModule_createInitialized(AlifModuleDef* _module) {
 	return (AlifObject*)m;
 }
 
+static AlifIntT addMethods_toObject(AlifObject* _module, AlifObject* _name, AlifMethodDef* _functions)
+{
+	AlifObject* func{};
+	AlifMethodDef* fDef{};
+
+	for (fDef = _functions; fDef->name != nullptr; fDef++) {
+		if ((fDef->flags & METHOD_CLASS) or
+			(fDef->flags & METHOD_STATIC)) {
+			// error
+			return -1;
+		}
+		func = ALIFCFUNCTION_NEWEX(fDef, (AlifObject*)_module, _name);
+		if (func == nullptr) return -1;
+
+		//alifObject_setDeferredRefCount(func); // need review
+		if (alifObject_setAttrString(_module, fDef->name, func) != 0) {
+			ALIF_DECREF(func);
+			return -1;
+		}
+		ALIF_DECREF(func);
+	}
+
+	return 0;
+}
 
 AlifIntT alifModule_addFunctions(AlifObject* m, AlifMethodDef* functions) { 
 	AlifIntT res{};
@@ -356,30 +380,6 @@ AlifObject* alifNew_module(const wchar_t* _name)
 	return module;
 }
 
-static AlifIntT addMethods_toObject(AlifObject* _module, AlifObject* _name, AlifMethodDef* _functions)
-{
-	AlifObject* func{};
-	AlifMethodDef* fDef{};
-
-	for (fDef = _functions; fDef->name != nullptr; fDef++) {
-		if ((fDef->flags & METHOD_CLASS) or
-			(fDef->flags & METHOD_STATIC)) {
-			// error
-			return -1;
-		}
-		func = ALIFCFUNCTION_NEWEX(fDef, (AlifObject*)_module, _name);
-		if (func == nullptr) return -1;
-
-		//alifObject_setDeferredRefCount(func); // need review
-		if (alifObject_setAttrString(_module, fDef->name, func) != 0) {
-			ALIF_DECREF(func);
-			return -1;
-		}
-		ALIF_DECREF(func);
-	}
-
-	return 0;
-}
 
 AlifObject* alifModule_fromDefAndSpec2(AlifModuleDef* def, AlifObject* spec, int module_api_version)
 {
