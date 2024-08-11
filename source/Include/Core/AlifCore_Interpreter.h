@@ -51,6 +51,8 @@ public:
 	class AlifDureRun* dureRun{};
 	AlifConfig config{};
 
+	unsigned long featureFlags;
+
 	AlifFrameEvalFunction evalFrame{};
 
 	AlifGCDureRun gc{};
@@ -69,7 +71,6 @@ public:
 
 
 
-
-
+int alifInterpreterState_hasFeature(AlifInterpreter* , unsigned long );
 
 AlifIntT alifInterpreter_new(AlifThread*, AlifInterpreter**);

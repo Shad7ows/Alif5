@@ -151,6 +151,11 @@ static AlifStackChunk* allocate_chunk(AlifIntT _sizeInBytes, AlifStackChunk* _pr
 	return res;
 }
 
+int alifInterpreterState_hasFeature(AlifInterpreter* interp, unsigned long feature)
+{
+	return ((interp->featureFlags & feature) != 0);
+}
+
 
 #define MINIMUM_OVERHEAD 1000
 

@@ -478,3 +478,21 @@ AlifObject** alif_vaBuildStack(AlifObject** smallStack, int64_t smallStackLen,
 	return stack;
 }
 
+int alifModule_addObjectRef(AlifObject* mod, const wchar_t* name, AlifObject* value)
+{
+	if (!ALIFMODULE_CHECK(mod)) {
+
+		return -1;
+	}
+	if (!value) {
+
+		return -1;
+	}
+
+	AlifObject* dict = alifModule_getDict(mod);
+	if (dict == NULL) {
+
+		return -1;
+	}
+	return alifDict_setItemString(dict, name, value);
+}

@@ -28,30 +28,7 @@ AlifObject* alifModuleDef_init(AlifModuleDef* def) {
 	return (AlifObject*)def;
 }
 
-static AlifIntT addMethods_toObject(AlifObject* _module, AlifObject* _name, AlifMethodDef* _functions)
-{
-	AlifObject* func{};
-	AlifMethodDef* fDef{};
 
-	for (fDef = _functions; fDef->name != nullptr; fDef++) {
-		if ((fDef->flags & METHOD_CLASS) or
-			(fDef->flags & METHOD_STATIC)) {
-			// error
-			return -1;
-		}
-		func = ALIFCFUNCTION_NEWEX(fDef, (AlifObject*)_module, _name);
-		if (func == nullptr) return -1;
-
-		//alifObject_setDeferredRefCount(func); // need review
-		if (alifObject_setAttrString(_module, fDef->name, func) != 0) {
-			ALIF_DECREF(func);
-			return -1;
-		}
-		ALIF_DECREF(func);
-	}
-
-	return 0;
-}
 
 AlifObject* alifModule_createInitialized(AlifModuleDef* _module) { 
 
@@ -377,6 +354,224 @@ AlifObject* alifNew_module(const wchar_t* _name)
 	module = alifModule_newObject(nameObj);
 	ALIF_DECREF(nameObj);
 	return module;
+}
+
+static AlifIntT addMethods_toObject(AlifObject* _module, AlifObject* _name, AlifMethodDef* _functions)
+{
+	AlifObject* func{};
+	AlifMethodDef* fDef{};
+
+	for (fDef = _functions; fDef->name != nullptr; fDef++) {
+		if ((fDef->flags & METHOD_CLASS) or
+			(fDef->flags & METHOD_STATIC)) {
+			// error
+			return -1;
+		}
+		func = ALIFCFUNCTION_NEWEX(fDef, (AlifObject*)_module, _name);
+		if (func == nullptr) return -1;
+
+		//alifObject_setDeferredRefCount(func); // need review
+		if (alifObject_setAttrString(_module, fDef->name, func) != 0) {
+			ALIF_DECREF(func);
+			return -1;
+		}
+		ALIF_DECREF(func);
+	}
+
+	return 0;
+}
+
+AlifObject* alifModule_fromDefAndSpec2(AlifModuleDef* def, AlifObject* spec, int module_api_version)
+{
+	AlifModuleDefSlot* cur_slot;
+	AlifObject* (*create)(AlifObject*, AlifModuleDef*) = NULL;
+	AlifObject* nameobj;
+	AlifObject* m = NULL;
+	int has_multiple_interpreters_slot = 0;
+	void* multiple_interpreters = (void*)0;
+	int has_gil_slot = 0;
+	void* gil_slot = (void*)0;
+	int has_execution_slots = 0;
+	const wchar_t* name;
+	int ret;
+	AlifInterpreter* interp = alifInterpreter_get();
+
+	alifModuleDef_init(def);
+
+	nameobj = alifObject_getAttrString(spec, L"name");
+	if (nameobj == NULL) {
+		return NULL;
+	}
+	name = alifUStr_asUTF8(nameobj);
+	if (name == NULL) {
+		goto error;
+	}
+
+	//if (!check_api_version(name, module_api_version)) {
+		//goto error;
+	//}
+
+	if (def->size < 0) {
+		goto error;
+	}
+
+	for (cur_slot = def->slots; cur_slot && cur_slot->slot; cur_slot++) {
+		switch (cur_slot->slot) {
+		case 1:
+			if (create) {
+				goto error;
+			}
+			//create = cur_slot->value;
+			break;
+		case 2:
+			has_execution_slots = 1;
+			break;
+		case 3:
+			if (has_multiple_interpreters_slot) {
+				goto error;
+			}
+			multiple_interpreters = cur_slot->value;
+			has_multiple_interpreters_slot = 1;
+			break;
+		case 4:
+			if (has_gil_slot) {;
+				goto error;
+			}
+			gil_slot = cur_slot->value;
+			has_gil_slot = 1;
+			break;
+		default:
+			goto error;
+		}
+	}
+
+	if (!has_multiple_interpreters_slot) {
+		multiple_interpreters = ((void*)1);
+	}
+	if (multiple_interpreters == (void*)0) {
+		if (!(interp == _alifDureRun_.interpreters.main)
+			&& alifImport_checkSubinterpIncompatibleExtensionAllowed(name) < 0)
+		{
+			goto error;
+		}
+	}
+	else if (multiple_interpreters != ((void*)2)
+		//&& interp->ceval.ownGil
+		&& !(interp == _alifDureRun_.interpreters.main)
+		&& alifImport_checkSubinterpIncompatibleExtensionAllowed(name) < 0)
+	{
+		goto error;
+	}
+
+	if (create) {
+		m = create(spec, def);
+		if (m == NULL) {
+			goto error;
+		}
+	}
+	else {
+		m = alifModule_newObject(nameobj);
+		if (m == NULL) {
+			goto error;
+		}
+	}
+
+	if (ALIFMODULE_CHECK(m)) {
+		((AlifModuleObject*)m)->state = NULL;
+		((AlifModuleObject*)m)->def = def;
+//#ifdef ALIF_GIL_DISABLED
+		//((AlifModuleObject*)m)->md_gil = gil_slot;
+//#else
+		(void)gil_slot;
+//#endif
+	}
+	else {
+		if (def->size > 0 || def->traverse || def->clear || def->free) {
+			goto error;
+		}
+		if (has_execution_slots) {
+			goto error;
+		}
+	}
+
+	if (def->methods != NULL) {
+		ret = addMethods_toObject(m, nameobj, def->methods);
+		if (ret != 0) {
+			goto error;
+		}
+	}
+
+	if (def->doc != NULL) {
+		//ret = alifModule_setDocString(m, def->doc);
+		if (ret != 0) {
+			goto error;
+		}
+	}
+
+	ALIF_DECREF(nameobj);
+	return m;
+
+error:
+	ALIF_DECREF(nameobj);
+	ALIF_XDECREF(m);
+	return NULL;
+}
+
+int alifModule_execDef(AlifObject* module, AlifModuleDef* def)
+{
+	AlifModuleDefSlot* cur_slot;
+	const wchar_t* name;
+	int ret;
+
+	name = alifModule_getName(module);
+	if (name == NULL) {
+		return -1;
+	}
+
+	if (def->size >= 0) {
+		AlifModuleObject* md = (AlifModuleObject*)module;
+		if (md->state == NULL) {
+			md->state = alifMem_objAlloc(def->size);
+			if (!md->state) {
+				return -1;
+			}
+			memset(md->state, 0, def->size);
+		}
+	}
+
+	if (def->slots == NULL) {
+		return 0;
+	}
+
+	for (cur_slot = def->slots; cur_slot && cur_slot->slot; cur_slot++) {
+		switch (cur_slot->slot) {
+		case 1:
+			break;
+		case 2:
+			ret = ((int (*)(AlifObject*))cur_slot->value)(module);
+			if (ret != 0) {
+
+				return -1;
+			}
+			break;
+		case 3:
+		case 4:
+			break;
+		default:
+			return -1;
+		}
+	}
+	return 0;
+}
+
+const wchar_t* alifModule_getName(AlifObject* m)
+{
+	AlifObject* name = alifModule_getNameObject(m);
+	if (name == NULL) {
+		return NULL;
+	}
+	ALIF_DECREF(name);   /* module dict has still a reference */
+	return alifUStr_asUTF8(name);
 }
 
 AlifObject* alifModule_getDict(AlifObject* _m)

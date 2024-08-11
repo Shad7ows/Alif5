@@ -8,7 +8,7 @@ extern AlifTypeObject _alifModuleType_;
 
 
 AlifObject* alifModule_getNameObject(AlifObject*); 
-
+const wchar_t* alifModule_getName(AlifObject* );
 
 class AlifModuleDefBase { 
 public:

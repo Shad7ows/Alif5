@@ -151,6 +151,8 @@ AlifObject* alifImport_getModules(AlifInterpreter* );
 
 extern AlifIntT alifImport_init();
 
+int alifImport_initCore(AlifThread* , AlifObject* , int );
+
 class ModuleAlias {
 public:
 	const wchar_t* name;                 /* ASCII encoded string */
@@ -163,3 +165,4 @@ extern const class Frozen* _alifImportFrozenTest_;
 
 extern const class ModuleAlias* _alifImportFrozenAliases_;
 
+int alifImport_checkSubinterpIncompatibleExtensionAllowed(const wchar_t* );

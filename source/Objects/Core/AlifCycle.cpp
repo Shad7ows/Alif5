@@ -6,6 +6,7 @@
 #include "AlifCore_AlifState.h"
 #include "AlifCore_DureRun.h"
 #include "AlifCore_DureRunInit.h"
+#include "AlifCore_Import.h"
 
 #ifdef _WINDOWS
 #include <windows.h>
@@ -188,7 +189,7 @@ static AlifIntT alifCore_interpreterInit(AlifThread* _thread) {
 
 	config_ = &interpreter->config;
 
-	//status = alifImport_initCore(thread, sysMod, config_->installImportLib);
+	status = alifImport_initCore(_thread, sysMod, config_->installImportlib);
 	if (status < 0) goto done;
 
 done:
