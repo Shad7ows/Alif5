@@ -156,7 +156,7 @@ static AlifIntT compute_localsPlusInfo(AlifCompileCodeUnitData* _cud, AlifIntT n
 }
 
 static AlifCodeObject* makeCode(AlifCompileCodeUnitData* _cud, AlifAssembler* _assembler, 
-	AlifObject* _constsList, AlifIntT _maxDepth, AlifIntT _nLocalsPlus, AlifObject* _fn) { 
+	AlifObject* _constsList, AlifIntT _maxDepth, AlifIntT _nLocalsPlus, int _codeFlags, AlifObject* _fn) { 
 
 	AlifCodeObject* co = nullptr;
 	AlifObject* names = nullptr;
@@ -194,7 +194,7 @@ static AlifCodeObject* makeCode(AlifCompileCodeUnitData* _cud, AlifAssembler* _a
 		_fn,
 		_cud->name,
 		_cud->qualName ? _cud->qualName : _cud->name,
-
+		_codeFlags,
 		_assembler->wByteCode,
 		_cud->firstLineNo,
 		_assembler->lineTable,
@@ -228,7 +228,7 @@ error:
 }
 
 AlifCodeObject* alifAssemble_makeCodeObject(AlifCompileCodeUnitData* _cud, AlifObject* _consts,
-	AlifIntT _maxDepth, InstructionSequence* _instrs, AlifIntT _nLocalsPlus, AlifObject* _fn) { 
+	AlifIntT _maxDepth, InstructionSequence* _instrs, AlifIntT _nLocalsPlus, int _codeFlags ,AlifObject* _fn) {
 
 	if (alifInstructionSeq_applyLableMap(_instrs) < 0) {
 		return nullptr;
@@ -244,7 +244,7 @@ AlifCodeObject* alifAssemble_makeCodeObject(AlifCompileCodeUnitData* _cud, AlifO
 	AlifAssembler assembler{};
 	AlifIntT res = assemble_emit(&assembler, _instrs, _cud->firstLineNo);
 	if (res == 1) {
-		co = makeCode(_cud, &assembler, _consts, _maxDepth, _nLocalsPlus, _fn);
+		co = makeCode(_cud, &assembler, _consts, _maxDepth, _nLocalsPlus, _codeFlags, _fn);
 	}
 
 	//assemble_free(&assembler);

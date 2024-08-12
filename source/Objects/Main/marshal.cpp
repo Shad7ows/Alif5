@@ -2,6 +2,7 @@
 #include "AlifCore_Call.h"
 #include "AlifCore_Memory.h"
 #include "AlifCore_Code.h"
+#include <AlifCore_AlifState.h>
 
 
 #define TYPE_NULL               '0'
@@ -49,9 +50,9 @@ public:
 	FILE* fp;
 	int depth;
 	AlifObject* readable;  /* Stream-like object being read from */
-	const wchar_t* ptr;
-	const wchar_t* end;
-	wchar_t* buf;
+	const char* ptr;
+	const char* end;
+	char* buf;
 	int64_t bufSize;
 	AlifObject* refs;  /* a list */
 	int allowCode;
@@ -60,13 +61,13 @@ public:
 #define SIZE32_MAX  0x7FFFFFFF
 
 
-static const wchar_t* r_string(int64_t n, Rfile* p) // 707
+static const char* r_string(int64_t n, Rfile* p) // 707
 {
 	int64_t read = -1;
 
 	if (p->ptr != NULL) {
 		/* Fast path for loads() */
-		const wchar_t* res = p->ptr;
+		const char* res = p->ptr;
 		int64_t left = p->end - p->ptr;
 		if (left < n) {
 
@@ -76,14 +77,14 @@ static const wchar_t* r_string(int64_t n, Rfile* p) // 707
 		return res;
 	}
 	if (p->buf == NULL) {
-		p->buf = (wchar_t*)alifMem_dataAlloc(n);
+		p->buf = (char*)alifMem_dataAlloc(n);
 		if (p->buf == NULL) {
 			return NULL;
 		}
 		p->bufSize = n;
 	}
 	else if (p->bufSize < n) {
-		wchar_t* tmp = (wchar_t*)alifMem_objRealloc(p->buf, n);
+		char* tmp = (char*)alifMem_objRealloc(p->buf, n);
 		if (tmp == NULL) {
 			return NULL;
 		}
@@ -131,7 +132,7 @@ static int r_byte(Rfile* p)
 		}
 	}
 	else {
-		const wchar_t* ptr = r_string(1, p);
+		const char* ptr = r_string(1, p);
 		if (ptr != NULL) {
 			return *(const unsigned char*)ptr;
 		}
@@ -162,7 +163,7 @@ static long r_long(Rfile* p)
 
 static double r_float_bin(Rfile* p)
 {
-	const wchar_t* buf = r_string(8, p);
+	const char* buf = r_string(8, p);
 	if (buf == NULL)
 		return -1;
 	return 1;
@@ -174,7 +175,7 @@ static double r_float_str(Rfile* p)
 {
 	int n;
 	char buf[256];
-	const wchar_t* ptr;
+	const char* ptr;
 	n = r_byte(p);
 	if (n == EOF) {
 		return -1;
@@ -333,7 +334,7 @@ static AlifObject* r_object(Rfile* p) // 1005
 
 	case TYPE_STRING:
 	{
-		const wchar_t* ptr;
+		const char* ptr;
 		n = r_long(p);
 		if (n < 0 || n > SIZE32_MAX) {
 			
@@ -373,18 +374,18 @@ static AlifObject* r_object(Rfile* p) // 1005
 		}
 	_read_ascii:
 		{
-			const wchar_t* ptr;
+			const char* ptr;
 			ptr = r_string(n, p);
 			if (ptr == NULL)
 				break;
-			//v = alifUStr_fromKindAndData(ALIFUSTR_1BYTE_KIND, ptr, n);
+			v = alifUStr_fromKindAndData(USTR_1BYTE, ptr, n);
 			if (v == NULL)
 				break;
 			if (is_interned) {
 				// marshal is meant to serialize .alifc files with code
 				// objects, and code-related strings are currently immortal.
-				//AlifInterpreter* interp = alifInterpreter_get();
-				//alifUStr_InternImmortal(interp, &v);
+				AlifInterpreter* interp = alifInterpreter_get();
+				//alifUStr_internImmortal(interp, &v);
 			}
 			retval = v;
 			R_REF(retval);
@@ -396,7 +397,7 @@ static AlifObject* r_object(Rfile* p) // 1005
 		ALIFFALLTHROUGH;
 	case TYPE_UNICODE:
 	{
-		const wchar_t* buffer;
+		const char* buffer;
 
 		n = r_long(p);
 		if (n < 0 || n > SIZE32_MAX) {
@@ -406,7 +407,7 @@ static AlifObject* r_object(Rfile* p) // 1005
 			buffer = r_string(n, p);
 			if (buffer == NULL)
 				break;
-			v = alifUStr_decodeUTF8(buffer, n, L"surrogatepass");
+			v = alifUStr_decodeUTF8((wchar_t*)buffer, n, L"surrogatepass");
 		}
 		else {
 			v = alifNew_uStr(0, 0);
@@ -582,6 +583,7 @@ static AlifObject* r_object(Rfile* p) // 1005
 		stacksize = (int)r_long(p);
 		flags = (int)r_long(p);
 		code = r_object(p);
+		class AlifCodeConstructor con {};
 		if (code == NULL)
 			goto code_error;
 		consts = r_object(p);
@@ -609,45 +611,44 @@ static AlifObject* r_object(Rfile* p) // 1005
 		linetable = r_object(p);
 		if (linetable == NULL)
 			goto code_error;
-		exceptiontable = r_object(p);
-		if (exceptiontable == NULL)
+		//exceptiontable = r_object(p);
+		//if (exceptiontable == NULL)
+			//goto code_error;
+
+		con = {
+			 filename,
+		     name,
+			 qualname,
+			 flags,
+
+			code,
+			firstlineno,
+			 linetable,
+
+			 consts,
+			names,
+
+			 localsplusnames,
+			 localspluskinds,
+
+			 argcount,
+			posonlyargcount,
+		 kwonlyargcount,
+
+			stacksize,
+
+		};
+
+		if (alifCode_validate(&con) < 0) {
 			goto code_error;
+		}
 
-		//class AlifCodeConstructor con = {
-		//	 filename,
-		//     name,
-		//	 qualname,
-		//	 flags,
+		v = (AlifObject*)alifCode_new(&con);
+		if (v == NULL) {
+			goto code_error;
+		}
 
-		//	code,
-		//	firstlineno,
-		//	 linetable,
-
-		//	 consts,
-		//	names,
-
-		//	 localsplusnames,
-		//	 localspluskinds,
-
-		//	 argcount,
-		//	posonlyargcount,
-		// kwonlyargcount,
-
-		//	stacksize,
-
-		//	 exceptiontable,
-		//};
-
-		//if (alifCode_Validate(&con) < 0) {
-		//	goto code_error;
-		//}
-
-		//v = (AlifObject*)alifCode_New(&con);
-		//if (v == NULL) {
-		//	goto code_error;
-		//}
-
-		//v = r_ref_insert(v, idx, flag, p);
+		v = r_ref_insert(v, idx, flag, p);
 
 	code_error:
 		ALIF_XDECREF(code);
@@ -693,10 +694,10 @@ static AlifObject* read_object(Rfile* p) // 1548
 	return v;
 }
 
-AlifObject* alifMarshal_readObjectFromString(const wchar_t* str, int64_t len) // 1670
+AlifObject* alifMarshal_readObjectFromString(const char* str, int64_t len) // 1670
 {
 	Rfile rf;
-	AlifObject* result;
+	AlifObject* result{};
 	rf.allowCode = 1;
 	rf.fp = NULL;
 	rf.readable = NULL;

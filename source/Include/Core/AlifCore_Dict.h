@@ -75,7 +75,6 @@ static inline AlifDictKeyEntry* dk_entries(AlifDictKeysObject* _dk) {
 static inline AlifDictUnicodeEntry* dk_uStr_entries(AlifDictKeysObject* _dk) {
 	return (AlifDictUnicodeEntry*)dkSub_entries(_dk);
 }
-
 // in alifCore_Dict_State file
 class AlifDictState {
 

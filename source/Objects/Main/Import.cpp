@@ -10,6 +10,7 @@
 #include "AlifCore_Namespace.h"
 #include "AlifCore_ModuleObject.h"
 #include "Marshal.h"
+#include <AlifCore_AlifHash.h>
 
 
 // in file Importdl.c
@@ -262,6 +263,21 @@ static AlifIntT initBuildin_modulesTable() {
 	return 0;
 }
 
+static void set_module_index(AlifModuleDef* def, int64_t index)
+{
+	if (index == def->base.index) {
+	}
+	else if (def->base.index == 0) {
+
+		def->base.index = index;
+	}
+	else {
+
+		def->base.index = index;
+	}
+}
+
+
 static int modules_byIndex_set(AlifInterpreter* interp,
 	int64_t index, AlifObject* module)
 {
@@ -345,6 +361,85 @@ public:
 	AlifExtModuleOrigin origin;
 };
 
+static class ExtensionsCacheValue* allocExtensions_cacheValue(void)
+{
+	class ExtensionsCacheValue* value
+		= (ExtensionsCacheValue*)alifMem_objAlloc(sizeof(class ExtensionsCacheValue));
+	if (value == NULL) {
+		return NULL;
+	}
+	*value = {0};
+	return value;
+}
+
+static void freeExtensions_cacheValue(class ExtensionsCacheValue* value)
+{
+	alifMem_objFree(value);
+}
+
+static void
+fixup_cached_def(class ExtensionsCacheValue* value)
+{
+	AlifModuleDef* def = value->def;
+
+	alif_setImmortalUntracked((AlifObject*)def);
+
+	def->base.init = value->init;
+
+	set_module_index(def, value->index);
+
+	if (value->dict != NULL) {
+		def->base.copy = ALIF_NEWREF(value->dict->copied);
+	}
+}
+
+static void restore_old_cached_def(AlifModuleDef* def, AlifModuleDefBase* oldbase)
+{
+	def->base = *oldbase;
+}
+
+static void cleanupOld_cachedDef(AlifModuleDefBase* oldbase)
+{
+	ALIF_XDECREF(oldbase->copy);
+}
+
+static void del_cached_def(class ExtensionsCacheValue* value)
+{
+	ALIF_XDECREF(value->def->base.copy);
+	value->def->base.copy = NULL;
+}
+
+static int initCached_mDict(class ExtensionsCacheValue* value, AlifObject* m_dict)
+{
+	if (m_dict == NULL) {
+		return 0;
+	}
+
+	AlifInterpreter* interp = alifInterpreter_get();
+
+	AlifObject* copied = alifDict_copy(m_dict);
+	if (copied == NULL) {
+		return -1;
+	}
+
+	value->Mdict = {
+		copied,
+		(interp->id_),
+	};
+
+	value->dict = &value->Mdict;
+	return 0;
+}
+
+
+static void delCached_mDict(class ExtensionsCacheValue* value)
+{
+	if (value->dict != NULL) {
+		ALIF_XDECREF(value->dict->copied);
+		value->dict = NULL;
+	}
+}
+
 static AlifObject* getCore_moduleDict(AlifInterpreter*, AlifObject*, AlifObject*);
 
 static AlifObject*
@@ -358,6 +453,16 @@ getCached_mDict(class ExtensionsCacheValue* value,
 	AlifObject* dict = value->def->base.copy;
 	ALIF_XINCREF(dict);
 	return dict;
+}
+
+
+static void delExtensions_cacheValue(class ExtensionsCacheValue* value)
+{
+	if (value != NULL) {
+		delCached_mDict(value);
+		del_cached_def(value);
+		freeExtensions_cacheValue(value);
+	}
 }
 
 static void* hashTable_keyFrom_2Strings(AlifObject* str1, AlifObject* str2, const wchar_t sep)
@@ -381,169 +486,9 @@ static void* hashTable_keyFrom_2Strings(AlifObject* str1, AlifObject* str2, cons
 	return key;
 }
 
-// in file AlifHash
-
- union AlifHashSecretT {
- public:
-	unsigned char uc[24];
-	class {
-	public:
-		size_t prefix;
-		size_t suffix;
-	} fnv;
-	class {
-	public:
-		uint64_t k0;
-		uint64_t k1;
-	} siphash;
-	class {
-	public:
-		unsigned char padding[16];
-		size_t suffix;
-	} djbx33a;
-	class {
-	public:
-		unsigned char padding[16];
-		size_t hashsalt;
-	} expat;
-} ;
-
-// Export for '_elementtree' shared extension
-extern AlifHashSecretT _alifHashSecret_;
-
-static AlifHashFuncDef _alifHashFunc_;
-
-#  define ROTATE(x, b)  _rotl64(x, b)
-
-#define HALF_ROUND(a,b,c,d,s,t)     \
-    a += b; c += d;                 \
-    b = ROTATE(b, s) ^ a;           \
-    d = ROTATE(d, t) ^ c;           \
-    a = ROTATE(a, 32);
-
-#define SINGLE_ROUND(v0,v1,v2,v3)   \
-    HALF_ROUND(v0,v1,v2,v3,13,16);  \
-    HALF_ROUND(v2,v1,v0,v3,17,21);
-
-#define DOUBLE_ROUND(v0,v1,v2,v3)   \
-    SINGLE_ROUND(v0,v1,v2,v3);      \
-    SINGLE_ROUND(v0,v1,v2,v3);
-
-
-static uint64_t
-siphash13(uint64_t k0, uint64_t k1, const void* src, int64_t src_sz) {
-	uint64_t b = (uint64_t)src_sz << 56;
-	const uint8_t* in = (const uint8_t*)src;
-
-	uint64_t v0 = k0 ^ 0x736f6d6570736575ULL;
-	uint64_t v1 = k1 ^ 0x646f72616e646f6dULL;
-	uint64_t v2 = k0 ^ 0x6c7967656e657261ULL;
-	uint64_t v3 = k1 ^ 0x7465646279746573ULL;
-
-	uint64_t t;
-	uint8_t* pt;
-
-	while (src_sz >= 8) {
-		uint64_t mi;
-		memcpy(&mi, in, sizeof(mi));
-		mi = (uint64_t)(mi);
-		in += sizeof(mi);
-		src_sz -= sizeof(mi);
-		v3 ^= mi;
-		SINGLE_ROUND(v0, v1, v2, v3);
-		v0 ^= mi;
-	}
-
-	t = 0;
-	pt = (uint8_t*)&t;
-	switch (src_sz) {
-	case 7: pt[6] = in[6]; ALIFFALLTHROUGH;
-	case 6: pt[5] = in[5]; ALIFFALLTHROUGH;
-	case 5: pt[4] = in[4]; ALIFFALLTHROUGH;
-	case 4: memcpy(pt, in, sizeof(uint32_t)); break;
-	case 3: pt[2] = in[2]; ALIFFALLTHROUGH;
-	case 2: pt[1] = in[1]; ALIFFALLTHROUGH;
-	case 1: pt[0] = in[0]; break;
-	}
-	b |= (uint64_t)(t);
-
-	v3 ^= b;
-	SINGLE_ROUND(v0, v1, v2, v3);
-	v0 ^= b;
-	v2 ^= 0xff;
-	SINGLE_ROUND(v0, v1, v2, v3);
-	SINGLE_ROUND(v0, v1, v2, v3);
-	SINGLE_ROUND(v0, v1, v2, v3);
-
-	/* modified */
-	t = (v0 ^ v1) ^ (v2 ^ v3);
-	return t;
-}
-
-
-size_t alif_HashBytes(const void* src, int64_t len)
-{
-	size_t x;
-
-	if (len == 0) {
-		return 0;
-	}
-
-//#ifdef ALIF_HASH_STATS
-	//hashstats[(len <= ALIFHASH_STATS_MAX) ? len : 0]++;
-//#endif
-
-#if ALIF_HASH_CUTOFF > 0
-	if (len < ALIF_HASH_CUTOFF) {
-		size_t hash;
-		const unsigned char* p = src;
-		hash = 5381;
-
-		switch (len) {
-		case 7: hash = ((hash << 5) + hash) + *p++; ALIFFALLTHROUGH;
-		case 6: hash = ((hash << 5) + hash) + *p++; ALIFFALLTHROUGH;
-		case 5: hash = ((hash << 5) + hash) + *p++; ALIFFALLTHROUGH;
-		case 4: hash = ((hash << 5) + hash) + *p++; ALIFFALLTHROUGH;
-		case 3: hash = ((hash << 5) + hash) + *p++; ALIFFALLTHROUGH;
-		case 2: hash = ((hash << 5) + hash) + *p++; ALIFFALLTHROUGH;
-		case 1: hash = ((hash << 5) + hash) + *p++; break;
-		default:
-			ALIF_UNREACHABLE();
-		}
-		hash ^= len;
-		hash ^= (Py_uhash_t)_Py_HashSecret.djbx33a.suffix;
-		x = (Py_hash_t)hash;
-	}
-	else
-#endif /
-		x = _alifHashFunc_.hash(src, len);
-
-	if (x == -1)
-		return -2;
-	return x;
-}
-
-class AlifHashFuncDef {
-public:
-	size_t(* const hash)(const void*, int64_t);
-	const char* name;
-	const int hash_bits;
-	const int seed_bits;
-} ;
-
-static size_t
-pysiphash(const void* src, int64_t src_sz) {
-	return (size_t)siphash13(
-		(uint64_t)(_alifHashSecret_.siphash.k0), (uint64_t)(_alifHashSecret_.siphash.k1),
-		src, src_sz);
-}
-
-static AlifHashFuncDef _alifHashFunc_ = { pysiphash, "siphash13", 64, 128 };
-
-
 static size_t hashtable_hashStr(const void* key)
 {
-	return alif_HashBytes(key, strlen((const char*)key));
+	return alif_hashBytes(key, strlen((const char*)key));
 }
 
 static int hashtable_compareStr(const void* key1, const void* key2)
@@ -565,11 +510,11 @@ public:
 static int extensions_cache_init(void)
 {
 	AlifHashTableAllocatorT alloc = { alifMem_objAlloc, alifMem_objFree };
-	EXTENSIONS.hashtable = _Py_hashtable_new_full(
+	EXTENSIONS.hashtable = alifHashtable_new_full(
 		hashtable_hashStr,
 		hashtable_compareStr,
 		hashtable_destroyStr,  // key
-		(AlifHashTableDestroyFunc)del_extensions_cache_value,  // value
+		(AlifHashTableDestroyFunc)delExtensions_cacheValue,  // value
 		&alloc
 	);
 	if (EXTENSIONS.hashtable == NULL) {
@@ -616,14 +561,14 @@ static class ExtensionsCacheValue* extensions_cacheGet(AlifObject* path, AlifObj
 }
 
 /* This can only fail with "out of memory". */
-static struct extensions_cache_value* extensions_cache_set(AlifObject* path, AlifObject* name,
+static class ExtensionsCacheValue* extensions_cacheSet(AlifObject* path, AlifObject* name,
 	AlifModuleDef* def, AlifModInitFunction m_init,
 	int64_t m_index, AlifObject* m_dict,
 	AlifExtModuleOrigin origin, void* md_gil)
 {
-	struct extensions_cache_value* value = NULL;
+	class ExtensionsCacheValue* value = NULL;
 	void* key = NULL;
-	struct extensions_cache_value* newvalue = NULL;
+	class ExtensionsCacheValue* newvalue = NULL;
 	AlifModuleDefBase olddefbase = def->base;
 	AlifHashTableEntryT* entry{};
 	extensions_lock_acquire();
@@ -634,24 +579,23 @@ static struct extensions_cache_value* extensions_cache_set(AlifObject* path, Ali
 		}
 	}
 
-	entry =
-		extensionsCache_findUnlocked(path, name, &key);
-	value = entry == NULL
-		? NULL
-		: (class ExtensionsCacheValue*)entry->value;
+	entry = extensionsCache_findUnlocked(path, name, &key);
+	value = entry == NULL ? NULL : (class ExtensionsCacheValue*)entry->value;
 	if (value != NULL) {
 		goto finally;
 	}
-	newvalue = alloc_extensions_cache_value();
+	newvalue = allocExtensions_cacheValue();
 	if (newvalue == NULL) {
 		goto finally;
 	}
 
 	/* Populate the new cache value data. */
-	*newvalue = (class ExtensionsCacheValue){
+	*newvalue = {
 		def,
 		m_init,
 		m_index,
+		nullptr,
+		nullptr,
 		origin,
 //#ifdef ALIF_GIL_DISABLED
 		//md_gil,
@@ -660,13 +604,13 @@ static struct extensions_cache_value* extensions_cache_set(AlifObject* path, Ali
 //#ifndef ALIF_GIL_DISABLED
 	//(void)md_gil;
 //#endif
-	if (init_cached_m_dict(newvalue, m_dict) < 0) {
+	if (initCached_mDict(newvalue, m_dict) < 0) {
 		goto finally;
 	}
 	fixup_cached_def(newvalue);
 
 	if (entry == NULL) {
-		if (_Py_hashtable_set(EXTENSIONS.hashtable, key, newvalue) < 0) {
+		if (alif_hashtable_set(EXTENSIONS.hashtable, key, newvalue) < 0) {
 			goto finally;
 		}
 		key = NULL;
@@ -684,11 +628,11 @@ static struct extensions_cache_value* extensions_cache_set(AlifObject* path, Ali
 	if (value == NULL) {
 		restore_old_cached_def(def, &olddefbase);
 		if (newvalue != NULL) {
-			del_extensions_cache_value(newvalue);
+			delExtensions_cacheValue(newvalue);
 		}
 	}
 	else {
-		cleanup_old_cached_def(&olddefbase);
+		cleanupOld_cachedDef(&olddefbase);
 	}
 
 	extensions_lock_release();
@@ -1341,7 +1285,7 @@ static FrozenStatus find_frozen(AlifObject* nameobj, struct FrozenInfo* info)
 
 static AlifObject* unmarshal_frozen_code(AlifInterpreter* interp, class FrozenInfo* info)
 {
-	AlifObject* co = alifMarshal_readObjectFromString(info->data, info->size);
+	AlifObject* co = alifMarshal_readObjectFromString((char*)info->data, info->size);
 	if (co == nullptr) {
 
 		//set_frozen_error(FROZEN_INVALID, info->nameobj);
@@ -1525,93 +1469,6 @@ static int init_importlib(AlifThread* tstate, AlifObject* sysmod)
 
 	return 0;
 }
-
-//static class ExtensionsCacheValue* extensions_cacheSet(AlifObject* path, AlifObject* name,
-//	AlifModuleDef* def, AlifModInitFunction m_init,
-//	int64_t m_index, AlifObject* m_dict,
-//	AlifExtModuleOrigin origin, void* md_gil)
-//{
-//	struct extensions_cache_value* value = nullptr;
-//	void* key = nullptr;
-//	struct extensions_cache_value* newvalue = nullptr;
-//	AlifModuleDefBase olddefbase = def->base;
-//
-//	extensions_lock_acquire();
-//
-//	if (EXTENSIONS.hashtable == nullptr) {
-//		if (_extensions_cache_init() < 0) {
-//			goto finally;
-//		}
-//	}
-//
-//	/* Create a cached value to populate for the module. */
-//	AlifHashTableEntryT* entry =
-//		_extensions_cache_find_unlocked(path, name, &key);
-//	value = entry == nullptr
-//		? nullptr
-//		: (class ExtensionsCacheValue*)entry->value;
-//	/* We should never be updating an existing cache value. */
-//	if (value != nullptr) {
-//		goto finally;
-//	}
-//	newvalue = alloc_extensions_cache_value();
-//	if (newvalue == nullptr) {
-//		goto finally;
-//	}
-//
-//	*newvalue = (class ExtensionsCacheValue){
-//		def,
-//		m_init,
-//		m_index,
-//		origin,
-//		nullptr,
-//	};
-//	if (init_cached_m_dict(newvalue, m_dict) < 0) {
-//		goto finally;
-//	}
-//	fixup_cached_def(newvalue);
-//
-//	if (entry == nullptr) {
-//		/* It was never added. */
-//		if (alifHashtable_set(EXTENSIONS.hashtable, key, newvalue) < 0) {
-//			goto finally;
-//		}
-//		/* The hashtable owns the key now. */
-//		key = nullptr;
-//	}
-//	else if (value == nullptr) {
-//		/* It was previously deleted. */
-//		entry->value = newvalue;
-//	}
-//	else {
-//		//ALIF_UNREACHABLE();
-//	}
-//
-//	value = newvalue;
-//
-//	finally:
-//	if (value == nullptr) {
-//		restore_old_cached_def(def, &olddefbase);
-//		if (newvalue != nullptr) {
-//			del_extensions_cache_value(newvalue);
-//		}
-//	}
-//	else {
-//		cleanup_old_cached_def(&olddefbase);
-//	}
-//
-//	extensions_lock_release();
-//	if (key != nullptr) {
-//		hashtable_destroy_str(key);
-//	}
-//
-//	return value;
-//}
-
-
-
-
-
 
 AlifIntT alifImport_init() {
 

@@ -15,6 +15,7 @@ AlifObject* alifUStr_internFromString(const wchar_t*);
 void alifUStr_internInPlace(AlifObject**);
 
 enum UStrKind {
+	USTR_1BYTE = 1,
 	USTR_2BYTE = 2,
 	USTR_4BYTE = 4,
 };
@@ -84,6 +85,7 @@ AlifObject* alifNew_uStr(size_t, uint8_t);
 AlifObject* alifNew_uStr(size_t, uint8_t);
 AlifObject* alifUStr_decodeStringToUTF8(const wchar_t*);
 AlifSizeT alifUStr_copyCharacters(AlifObject*, AlifSizeT, AlifObject*, AlifSizeT, AlifSizeT);
+AlifObject* alifUStr_fromKindAndData(int , const void* , int64_t );
 uint8_t find_maxChar(const wchar_t* str);
 size_t hash_uStr(AlifObject*);
 static AlifObject* alifUStr_fromUint16(const uint16_t*, int64_t);

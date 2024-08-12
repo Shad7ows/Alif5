@@ -648,6 +648,28 @@ static uint32_t kind_maxChar_limit(int _kind)
 }
 
 static AlifObject*
+alifUStr_fromUint8(const uint8_t* u, int64_t size)
+{
+	AlifObject* res;
+	unsigned char max_char ;
+
+	if (size == 0) {
+		//ALIF_RETURN_UNICODE_EMPTY();
+	}
+	if (size == 1) {
+		//return get_latin1_char(u[0]);
+	}
+
+	max_char = find_maxChar((wchar_t*)u);
+	res = alifNew_uStr(size, max_char);
+	if (!res)
+		return NULL;
+	memcpy(((uint8_t*)res), u, size);
+	return res;
+}
+
+
+static AlifObject*
 alifUStr_fromUint16(const uint16_t* _u, int64_t _size)
 {
 	AlifObject* res_;
@@ -691,6 +713,23 @@ static AlifObject* alifUStr_fromUint32(const uint32_t* _u, int64_t _size)
 		 memcpy(((uint32_t*)ALIFUSTR_CAST(res_)->UTF), _u, sizeof(uint32_t) * _size);
 	 }
 	return res_;
+}
+
+AlifObject* alifUStr_fromKindAndData(int kind, const void* buffer, int64_t size)
+{
+	if (size < 0) {
+		return NULL;
+	}
+	switch (kind) {
+	case USTR_1BYTE:
+		return alifUStr_fromUint8((const uint8_t*)buffer, size);
+	case USTR_2BYTE:
+		return alifUStr_fromUint16((const uint16_t*)buffer, size);
+	case USTR_4BYTE:
+		return alifUStr_fromUint32((const uint32_t*)buffer, size);
+	default:
+		return NULL;
+	}
 }
 
 void combine_string(AlifObject* _result, AlifSizeT start_, AlifObject* _from, AlifSizeT _fromStart, AlifSizeT _length, uint8_t _maxChar) {

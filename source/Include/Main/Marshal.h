@@ -1,4 +1,4 @@
 #pragma once
 
 
-AlifObject* alifMarshal_readObjectFromString(const wchar_t* , int64_t );
+AlifObject* alifMarshal_readObjectFromString(const char* , int64_t );

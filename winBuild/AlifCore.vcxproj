@@ -22,6 +22,7 @@
     <ClInclude Include="..\source\Include\Core\AlifCore_Abstract.h" />
     <ClInclude Include="..\source\Include\Core\AlifCore_AlifCycle.h" />
     <ClInclude Include="..\source\Include\Core\AlifCore_AlifEval.h" />
+    <ClInclude Include="..\source\Include\Core\AlifCore_AlifHash.h" />
     <ClInclude Include="..\source\Include\Core\AlifCore_AlifRun.h" />
     <ClInclude Include="..\source\Include\Core\AlifCore_AlifState.h" />
     <ClInclude Include="..\source\Include\Core\AlifCore_AlifThread.h" />
@@ -50,6 +51,7 @@
     <ClInclude Include="..\source\Include\Core\AlifCore_GlobalObjects.h" />
     <ClInclude Include="..\source\Include\Core\AlifCore_GlobalString.h" />
     <ClInclude Include="..\source\Include\Core\AlifCore_HashArrayMapTree.h" />
+    <ClInclude Include="..\source\Include\Core\AlifCore_Hashtable.h" />
     <ClInclude Include="..\source\Include\Core\AlifCore_Import.h" />
     <ClInclude Include="..\source\Include\Core\AlifCore_InitConfig.h" />
     <ClInclude Include="..\source\Include\Core\AlifCore_InstructionSeq.h" />
@@ -71,7 +73,9 @@
     <ClInclude Include="..\source\Include\Core\AlifCore_Tuple.h" />
     <ClInclude Include="..\source\Include\Core\AlifCore_TypeObject.h" />
     <ClInclude Include="..\source\Include\Core\AlifCore_UString.h" />
+    <ClInclude Include="..\source\Include\Main\Importlib._bootstrap.h" />
     <ClInclude Include="..\source\Include\Main\MemoryObject.h" />
+    <ClInclude Include="..\source\Include\Main\ZipImport.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\source\Objects\Core\AlifCycle.cpp" />
@@ -82,6 +86,9 @@
     <ClCompile Include="..\source\Objects\Core\InitConfig.cpp" />
     <ClCompile Include="..\source\Objects\Core\Memory.cpp" />
     <ClCompile Include="..\source\Objects\Core\UStrObject.cpp" />
+    <ClCompile Include="..\source\Objects\Main\AlifHash.cpp" />
+    <ClCompile Include="..\source\Objects\Main\Frozen.cpp" />
+    <ClCompile Include="..\source\Objects\Main\Hashtable.cpp" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>17.0</VCProjectVersion>

@@ -31,6 +31,18 @@ void alifSub_decRef(AlifObject* _o)
 	ALIF_DECREF(_o);
 }
 
+void alif_setImmortalUntracked(AlifObject* op)
+{
+
+#ifdef ALIF_GIL_DISABLED
+	op->tid = ALIF_UNOWNED_TID;
+	op->refLocal = ALIF_IMMORTAL_REFCNT_LOCAL;
+	op->refShared = 0;
+#else
+	op->ref_ = ALIF_IMMORTAL_REFCNT;
+#endif
+}
+
 void alif_setImmortal(AlifObject* object)
 {
 	if (object) {

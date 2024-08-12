@@ -57,6 +57,7 @@
     <ClInclude Include="..\source\Include\Main\GenericAliasObject.h" />
     <ClInclude Include="..\source\Include\Main\Helpers.h" />
     <ClInclude Include="..\source\Include\Main\Import.h" />
+    <ClInclude Include="..\source\Include\Main\Importlib._bootstrap_external.h" />
     <ClInclude Include="..\source\Include\Main\InitConfig.h" />
     <ClInclude Include="..\source\Include\Main\IntegerObject.h" />
     <ClInclude Include="..\source\Include\Main\IterObject.h" />

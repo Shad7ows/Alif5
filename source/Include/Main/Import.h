@@ -64,7 +64,7 @@ public:
 class Frozen {
 public:
 	const wchar_t* name;                 /* ASCII encoded string */
-	const wchar_t* code;
+	const unsigned char* code;
 	int size;
 	int isPackage;
 };

@@ -28,4 +28,4 @@ AlifIntT alifCFG_optimizedCFGToInstructionSeq(AlifFlowGraph*, AlifCompileCodeUni
 	AlifIntT*, AlifIntT*, InstructionSequence*);
 
 AlifCodeObject* alifAssemble_makeCodeObject(AlifCompileCodeUnitData*,
-	AlifObject*, AlifIntT, InstructionSequence*, AlifIntT, AlifObject*);
+	AlifObject*, AlifIntT, InstructionSequence*, AlifIntT, int , AlifObject*);

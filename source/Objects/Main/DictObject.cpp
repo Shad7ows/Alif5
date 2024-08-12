@@ -52,6 +52,17 @@ static AlifIntT setItem_lockHeld(AlifDictObject*, AlifObject*, AlifObject*);
 #define DK_MASK(dk_) (DK_SIZE(dk_)-1)
 
 
+static inline void dictKeys_incref(AlifDictKeysObject* dk)
+{
+	if ((dk->refCnt) == ALIF_IMMORTAL_REFCNT) {
+		return;
+	}
+//#ifdef ALIF_REF_DEBUG
+	//alif_IncRefTotal(alifThread_get());
+//#endif
+	(dk->refCnt++);
+}
+
 static inline void dictKeys_decref(AlifInterpreter* _interp, AlifDictKeysObject* _dk, bool _useQsbr) 
 {
 	if (_dk->refCnt == ALIF_IMMORTAL_REFCNT) {
@@ -220,6 +231,24 @@ static void free_keys_object(AlifDictKeysObject* _keys, bool _useQsbr)
 	alifMem_objFree(_keys);
 }
 
+static size_t valuesSize_fromCount(size_t count)
+{
+	size_t suffix_size = ALIFSIZE_ROUND_UP(count, sizeof(AlifObject*));
+	return (count + 1) * sizeof(AlifObject*) + suffix_size;
+}
+
+static inline AlifDictValues* new_values(size_t size)
+{
+	size_t n = valuesSize_fromCount(size);
+	AlifDictValues* res = (AlifDictValues*)alifMem_objAlloc(n);
+	if (res == NULL) {
+		return NULL;
+	}
+	res->embedded = 0;
+	res->size = 0;
+	res->capacity = (uint8_t)size;
+	return res;
+}
 
 static inline void free_values(AlifDictValues* _values, bool _useQsbr) 
 {
@@ -1595,6 +1624,107 @@ int alifDict_update(AlifObject* a, AlifObject* b)
 	AlifInterpreter* interp = alifInterpreter_get();
 	return dict_merge(interp, a, b, 1);
 }
+
+static AlifDictValues* copy_values(AlifDictValues* values)
+{
+	AlifDictValues* newvalues = new_values(values->capacity);
+	if (newvalues == NULL) {
+		return NULL;
+	}
+	newvalues->size = values->size;
+	uint8_t* values_order = getInsertion_orderArray(values);
+	uint8_t* new_values_order = getInsertion_orderArray(newvalues);
+	memcpy(new_values_order, values_order, values->capacity);
+	for (int i = 0; i < values->capacity; i++) {
+		newvalues->values[i] = values->values[i];
+	}
+	return newvalues;
+}
+
+static AlifObject* copy_lock_held(AlifObject* o)
+{
+	AlifObject* copy;
+	AlifDictObject* mp;
+	AlifInterpreter* interp = alifInterpreter_get();
+
+
+	mp = (AlifDictObject*)o;
+	if (mp->used == 0) {
+		/* The dict is empty; just return a new dict. */
+		return alifNew_dict();
+	}
+
+	if (ALIFDICT_HASSPLITTABLE(mp)) {
+		AlifDictObject* split_copy;
+		AlifDictValues* newvalues = copy_values(mp->values);
+		if (newvalues == NULL) {
+			return nullptr;
+		}
+		split_copy = ALIFOBJECT_GC_NEW(AlifDictObject, &_alifDictType_);
+		if (split_copy == NULL) {
+			free_values(newvalues, false);
+			return NULL;
+		}
+		for (size_t i = 0; i < newvalues->capacity; i++) {
+			ALIF_XINCREF(newvalues->values[i]);
+		}
+		split_copy->values = newvalues;
+		split_copy->keys = mp->keys;
+		split_copy->used = mp->used;
+		//split_copy->versionTag = DICT_NEXT_VERSION(interp);
+		dictKeys_incref(mp->keys);
+		if (ALIFSUBOBJECT_GC_ISTRACKED(mp))
+			alifObject_gc_track(split_copy);
+		return (AlifObject*)split_copy;
+	}
+
+	if (ALIF_TYPE(mp)->iter_ == dict_iter &&
+		mp->values == NULL &&
+		(mp->used >= (mp->keys->nentries * 2) / 3))
+	{
+
+		AlifDictKeysObject* keys = cloneCombined_dictKeys(mp);
+		if (keys == NULL) {
+			return NULL;
+		}
+		AlifDictObject* new_ = (AlifDictObject*)new_dict(interp, keys, NULL, 0, 0);
+		if (new_ == NULL) {
+
+			return NULL;
+		}
+
+		new_->used = mp->used;
+		if (ALIFSUBOBJECT_GC_ISTRACKED(mp)) {
+			alifObject_gc_track(new_);
+		}
+
+		return (AlifObject*)new_;
+	}
+
+	copy = alifNew_dict();
+	if (copy == NULL)
+		return NULL;
+	if (dict_merge(interp, copy, o, 1) == 0)
+		return copy;
+	ALIF_DECREF(copy);
+	return NULL;
+}
+
+AlifObject* alifDict_copy(AlifObject* o)
+{
+	if (o == NULL || !ALIFDICT_CHECK(o)) {
+		return NULL;
+	}
+
+	AlifObject* res;
+	//ALIF_BEGIN_CRITICAL_SECTION(o);
+
+	res = copy_lock_held(o);
+
+	//ALIF_END_CRITICAL_SECTION();
+	return res;
+}
+
 
 int alifDict_containsString(AlifObject* _op, const wchar_t* _key)
 {

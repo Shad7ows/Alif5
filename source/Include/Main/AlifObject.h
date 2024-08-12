@@ -28,6 +28,9 @@
 #define ALIFOBJECT_VAR_HEAD		AlifVarObject _base_{};
 #define Alif_INVALID_SIZE (AlifSizeT) - 1
 
+void alif_setImmortalUntracked(AlifObject* );
+
+
 class AlifObject {
 public:
 	AlifUSizeT ref_{};
@@ -563,7 +566,7 @@ static inline int alifType_hasFeature(AlifTypeObject* _type, unsigned long _feat
 	//#ifdef ALIF_LIMITED_API
 	//	flags_ = alifType_getFlags(type);
 	//#else
-	//	flags_ = _type->flags_;
+		//flags_ = _type->flags_;
 	//#endif
 	return ((flags_ & _feature) != 0);
 }

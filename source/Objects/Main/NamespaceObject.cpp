@@ -26,7 +26,7 @@ static AlifObject* namespace_new(AlifTypeObject* type, AlifObject* args, AlifObj
 	return self;
 }
 
-AlifTypeObject _PyNamespace_Type = {
+AlifTypeObject _alifNamespaceType_ = {
 	ALIFVAROBJECT_HEAD_INIT(&_alifTypeType_, 0)
 	L"types.SimpleNamespace",                    /* tp_name */
 	sizeof(AlifNamespaceObject),                 /* tp_basicsize */
@@ -71,7 +71,7 @@ AlifTypeObject _PyNamespace_Type = {
 
 AlifObject* alifNew_namespace(AlifObject* kwds)
 {
-	AlifObject* ns = namespace_new(&_PyNamespace_Type, NULL, NULL);
+	AlifObject* ns = namespace_new(&_alifNamespaceType_, NULL, NULL);
 	if (ns == NULL)
 		return NULL;
 

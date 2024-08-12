@@ -13,6 +13,7 @@ int alifDict_getItemRef(AlifObject* , AlifObject* , AlifObject** );
 int alifDict_setItem(AlifObject*, AlifObject*, AlifObject* );
 int alifDict_next(AlifObject* , int64_t* , AlifObject** , AlifObject** );
 AlifObject* alifDict_keys(AlifObject* );
+AlifObject* alifDict_copy(AlifObject* );
 int alifDict_contains(AlifObject* , AlifObject* );
 
 int alifDict_update(AlifObject* , AlifObject* );

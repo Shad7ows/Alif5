@@ -76,6 +76,7 @@ class AlifCompiler {
 public:
 	AlifObject* fileName{};
 	AlifSymTable* symTable{};
+	AlifCompilerFlags cFlags;
 
 	AlifIntT optimize{};
 	AlifIntT interactive{};
@@ -891,6 +892,34 @@ static AlifIntT compiler_body(AlifCompiler* _compiler, SourceLocation _loc, Stmt
 	return 1;
 }
 
+static int compute_code_flags(class AlifCompiler* c)
+{
+	AlifSTEntryObject* ste = (c->unit->symTableEntry);
+	int flags = 0;
+	if (alifST_isFunctionLike(ste)) {
+		flags |= CO_NEWLOCALS | CO_OPTIMIZED;
+		if (ste->steNested)
+			flags |= CO_NESTED;
+		if (ste->steGenerator && !ste->steCoroutine)
+			flags |= CO_GENERATOR;
+		if (ste->steGenerator && ste->steCoroutine)
+			flags |= CO_ASYNC_GENERATOR;
+		if (ste->steVarArgs)
+			flags |= CO_VARARGS;
+		if (ste->steVarKeywords)
+			flags |= CO_VARKEYWORDS;
+	}
+
+	if (ste->steCoroutine && !ste->steGenerator) {
+		flags |= CO_COROUTINE;
+	}
+
+	/* (Only) inherit compilerflags in PyCF_MASK */
+	flags |= (c->cFlags.cfFlags & ALIFCF_MASK);
+
+	return flags;
+}
+
 
 static AlifIntT addReturn_atEnd(AlifCompiler* _compiler, AlifIntT _addNone) { 
 	if (_addNone) {
@@ -964,7 +993,7 @@ error:
 	return nullptr;
 }
 
-static AlifCodeObject* optimize_andAssembleCodeUnit(CompilerUnit* _cu, AlifObject* _fn) { 
+static AlifCodeObject* optimize_andAssembleCodeUnit(CompilerUnit* _cu,int _codeFlags, AlifObject* _fn) {
 
 	AlifFlowGraph* cfg = nullptr;
 	InstructionSequence optimizedInstrs{};
@@ -996,7 +1025,7 @@ static AlifCodeObject* optimize_andAssembleCodeUnit(CompilerUnit* _cu, AlifObjec
 
 	/* المجمع */
 	co = alifAssemble_makeCodeObject(&_cu->data, consts,
-		stackDepth, &optimizedInstrs, nLocalsPlus, _fn);
+		stackDepth, &optimizedInstrs, nLocalsPlus, _codeFlags, _fn);
 
 error:
 	ALIF_XDECREF(consts);
@@ -1010,10 +1039,11 @@ static AlifCodeObject* optimize_andAssemble(AlifCompiler* _compiler, AlifIntT _a
 	AlifObject* fn = _compiler->fileName;
 
 	// flags of code here
+	int codeFlags = compute_code_flags(_compiler);
 
 	if (addReturn_atEnd(_compiler, _addNone) < 1) {
 		return nullptr;
 	}
 
-	return optimize_andAssembleCodeUnit(cu, fn);
+	return optimize_andAssembleCodeUnit(cu, codeFlags,fn);
 }

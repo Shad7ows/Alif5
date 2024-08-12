@@ -26,7 +26,7 @@ public:
     AlifObject* fileName{};
     AlifObject* name{};
     AlifObject* qualName{};
-    //int flags;
+    int flags;
 
     /* the code */
     AlifObject* code{};
@@ -54,7 +54,7 @@ public:
 };
 
 
-
+int alifCode_validate(class AlifCodeConstructor* );
 
 extern AlifCodeObject* alifCode_new(AlifCodeConstructor*);
 
