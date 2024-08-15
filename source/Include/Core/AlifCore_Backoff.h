@@ -1,5 +1,17 @@
 #pragma once
+#include <cstdint>
 
+class AlifBackoffCounter {
+public:
+	union {
+		class {
+		public:
+			uint16_t backoff : 4;
+			uint16_t value : 12;
+		};
+		uint16_t asCounter;
+	};
+};
 
 #define UNREACHABLE_BACKOFF 0xFFFF
 
@@ -21,6 +33,16 @@ static inline AlifBackoffCounter forge_backoffCounter(uint16_t counter)
 	AlifBackoffCounter result;
 	result.asCounter = counter;
 	return result;
+}
+
+static inline AlifBackoffCounter restart_backoff_counter(AlifBackoffCounter counter)
+{
+	if (counter.backoff < 12) {
+		return make_backoffCounter((1 << (counter.backoff + 1)) - 1, counter.backoff + 1);
+	}
+	else {
+		return make_backoffCounter((1 << 12) - 1, 12);
+	}
 }
 
 static inline bool backoff_counterTriggers(AlifBackoffCounter _counter)

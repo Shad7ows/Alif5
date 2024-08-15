@@ -1,31 +1,49 @@
 #pragma once
 
 
+#define  ALIF_MONITORING_LOCAL_EVENTS 10
+/* Count of all "real" monitoring events (not derived from other events) */
+#define ALIF_MONITORING_UNGROUPED_EVENTS 15
+/* Count of all  monitoring events */
+#define ALIF_MONITORING_EVENTS 17
 
-
-
-
-class AlifBackoffCounter {
+class AlifLocalMonitors {
 public:
-	union {
-		class {
-		public:
-			uint16_t backoff : 4;
-			uint16_t value : 12;
-		};
-		uint16_t asCounter;
-	};
-};
+	uint8_t tools[ALIF_MONITORING_LOCAL_EVENTS];
+} ;
 
-union AlifCodeUnit {
-	uint16_t cache{};
-	class {
-	public:
-		uint8_t code{};
-		uint8_t arg{};
-	}op;
-	AlifBackoffCounter counter;
-};
+class AlifGlobalMonitors {
+public:
+	uint8_t tools[ALIF_MONITORING_UNGROUPED_EVENTS];
+} ;
+
+class AlifCoLineInstrumentationData {
+public:
+	uint8_t original_opcode;
+	int8_t line_delta;
+} ;
+
+class AlifCoMonitoringData{
+public:
+	/* Monitoring specific to this code object */
+	AlifLocalMonitors local_monitors;
+	/* Monitoring that is active on this code object */
+	AlifLocalMonitors active_monitors;
+	/* The tools that are to be notified for events for the matching code unit */
+	uint8_t* tools;
+	/* Information to support line events */
+	AlifCoLineInstrumentationData* lines;
+	/* The tools that are to be notified for line events for the matching code unit */
+	uint8_t* line_tools;
+	/* Information to support instruction events */
+	/* The underlying instructions, which can themselves be instrumented */
+	uint8_t* per_instruction_opcodes;
+	/* The tools that are to be notified for instruction events for the matching code unit */
+	uint8_t* per_instruction_tools;
+} ;
+
+
+
 
 
 class AlifCodeObject {  
@@ -53,6 +71,7 @@ public:
 	AlifObject* name{};
 	AlifObject* qualName{};
 	AlifObject* lineTable{};
+	AlifCoMonitoringData* coMonitoring; /* Monitoring data */              
 
 	AlifIntT firstTraceable{};
 

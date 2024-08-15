@@ -67,6 +67,10 @@ public:
 
 	class TypesState types;
 
+	AlifGlobalMonitors monitors;
+	AlifObject* monitoringCallables[8][ALIF_MONITORING_EVENTS];
+
+
 };
 
 

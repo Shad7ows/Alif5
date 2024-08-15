@@ -1,9 +1,21 @@
 #pragma once
 
+#ifdef LLTRACE
+#define PRE_DISPATCH_GOTO() if (lltrace >= 5) { \
+    lltrace_instruction(frame, stack_pointer, next_instr, opcode, oparg); }
+#else
+#define PRE_DISPATCH_GOTO() ((void)0)
+#endif
+
 #  define TARGET(_op) case _op: TARGET_##_op:
 #  define DISPATCH_GOTO() goto dispatchOpCode 
 
-
+#define DISPATCH_SAME_OPARG() \
+    { \
+        opCode = nextInstr->op.code; \
+        PRE_DISPATCH_GOTO(); \
+        DISPATCH_GOTO(); \
+    }
 
 
 #define NEXTOPARG()  do { \
@@ -23,12 +35,21 @@
 
 
 
-
+#define PREDICT_ID(op)          PRED_##op
+#define PREDICTED(op)           PREDICT_ID(op):
 
 
 
 #define FRAME_CO_CONSTS (alifFrame_getCode(_frame)->consts)
 #define FRAME_CO_NAMES  (alifFrame_getCode(_frame)->names)
+
+#define GO_TO_INSTRUCTION(op) goto PREDICT_ID(op)
+
+
+#define DEOPT_IF(COND, INSTNAME)                            \
+    if ((COND)) {                                           \
+        GO_TO_INSTRUCTION(INSTNAME);                        \
+    }
 
 //294
 #define GLOBALS() _frame->globals
@@ -52,3 +73,6 @@
     } while (0)
 
 #define LOAD_SP() stackPtr = alifFrame_getStackPointer(_frame);
+
+#define STACKREFS_TO_ALIFOBJECTS(ARGS, ARG_COUNT, NAME) \
+    AlifObject **NAME = (AlifObject **)ARGS; \

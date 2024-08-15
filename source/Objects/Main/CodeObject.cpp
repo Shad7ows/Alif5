@@ -62,37 +62,39 @@ static void get_localsPlusCounts(AlifObject* _names, AlifObject* _kinds,
 	}
 }
 
+#define ALIF_IS_ALIGNED(p, a) (!((uintptr_t)(p) & (uintptr_t)((a) - 1)))
 
 int alifCode_validate(class AlifCodeConstructor* con)
 {
 	/* Check argument types */
-	//if (con->argCount < con->posOnlyArgCount || con->posOnlyArgCount < 0 ||
-	//	con->kwOnlyArgCount < 0 ||
-	//	con->stacksize < 0 || con->flags < 0 ||
-	//	con->code == NULL || !ALIFBYTES_CHECK(con->code) ||
-	//	con->consts == NULL || !ALIFTUPLE_CHECK(con->consts) ||
-	//	con->names == NULL || !ALIFTUPLE_CHECK(con->names) ||
-	//	con->localsPlusNames == NULL || !ALIFTUPLE_CHECK(con->localsPlusNames) ||
-	//	con->localsPlusKinds == NULL || !ALIFBYTES_CHECK(con->localsPlusKinds) ||
-	//	ALIFTUPLE_GET_SIZE(con->localsPlusNames)
-	//	!= ALIFWBYTES_GET_SIZE(con->localsPlusKinds) ||
-	//	con->name == NULL || !ALIFUSTR_CHECK(con->name) ||
-	//	con->qualName == NULL || !ALIFUSTR_CHECK(con->qualName) ||
-	//	con->fileName == NULL || !ALIFUSTR_CHECK(con->fileName) ||
-	//	con->lineTable == NULL || !ALIFBYTES_CHECK(con->lineTable)
-	//	) {
-	//	return -1;
-	//}
+	if (con->argCount < con->posOnlyArgCount || con->posOnlyArgCount < 0 ||
+		con->kwOnlyArgCount < 0 ||
+		con->stacksize < 0 || con->flags < 0 ||
+		con->code == NULL || !ALIFBYTES_CHECK(con->code) ||
+		con->consts == NULL || !ALIFTUPLE_CHECK(con->consts) ||
+		con->names == NULL || !ALIFTUPLE_CHECK(con->names) ||
+		con->localsPlusNames == NULL || !ALIFTUPLE_CHECK(con->localsPlusNames) ||
+		con->localsPlusKinds == NULL || !ALIFBYTES_CHECK(con->localsPlusKinds) ||
+		ALIFTUPLE_GET_SIZE(con->localsPlusNames)
+		!= ALIFWBYTES_GET_SIZE(con->localsPlusKinds) ||
+		con->name == NULL || !ALIFUSTR_CHECK(con->name) ||
+		con->qualName == NULL || !ALIFUSTR_CHECK(con->qualName) ||
+		con->fileName == NULL || !ALIFUSTR_CHECK(con->fileName) ||
+		con->lineTable == NULL || !ALIFBYTES_CHECK(con->lineTable)||
+		con->exceptionTable == NULL || !ALIFBYTES_CHECK(con->exceptionTable)
+		) {
+		return -1;
+	}
 
 	if (ALIFWBYTES_GET_SIZE(con->code) > INT_MAX) {
 
 		return -1;
 	}
-	//if (ALIFWBYTES_GET_SIZE(con->code) % sizeof(_alifCODEUNIT) != 0 ||
-		//!ALIF_IS_ALIGNED(ALIFWBytes_AS_STRING(con->code), sizeof(_alifCODEUNIT))
-		//) {
-		//return -1;
-	//}
+	if (ALIFWBYTES_GET_SIZE(con->code) % sizeof(AlifCodeUnit) != 0 ||
+		!ALIF_IS_ALIGNED(ALIFWBYTES_AS_STRING(con->code), sizeof(AlifCodeUnit))
+		) {
+		return -1;
+	}
 
 	int nlocals;
 	get_localsPlusCounts(con->localsPlusNames, con->localsPlusKinds,
@@ -102,9 +104,9 @@ int alifCode_validate(class AlifCodeConstructor* con)
 		con->kwOnlyArgCount -
 		((con->flags & CO_VARARGS) != 0) -
 		((con->flags & CO_VARKEYWORDS) != 0);
-	if (nplainlocals < 0) {
-		return -1;
-	}
+	//if (nplainlocals < 0) {
+		//return -1;
+	//}
 
 	return 0;
 }

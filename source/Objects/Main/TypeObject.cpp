@@ -633,3 +633,199 @@ AlifTypeObject _alifBaseObjectType_ = {
 	0,              
 	0,              
 };
+
+class SuperObject{
+public:
+	ALIFOBJECT_HEAD
+	AlifTypeObject* type;
+	AlifObject* obj;
+	AlifTypeObject* obj_type;
+} ;
+
+
+static AlifObject* super_lookup_descr(AlifTypeObject* su_type, AlifTypeObject* su_obj_type, AlifObject* name)
+{
+	AlifObject* mro, * res;
+	int64_t i, n;
+
+	//BEGIN_TYPE_LOCK();
+	mro = (su_obj_type->mro_);
+	ALIF_XINCREF(mro);
+	//END_TYPE_LOCK();
+
+	if (mro == NULL)
+		return NULL;
+
+	n = ALIFTUPLE_GET_SIZE(mro);
+
+	for (i = 0; i + 1 < n; i++) {
+		if ((AlifObject*)(su_type) == ALIFTUPLE_GET_ITEM(mro, i))
+			break;
+	}
+	i++;  /* skip su->type (if any)  */
+	if (i >= n) {
+		ALIF_DECREF(mro);
+		return NULL;
+	}
+
+	do {
+		AlifObject* obj = ALIFTUPLE_GET_ITEM(mro, i);
+		AlifObject* dict = lookupType_dict((AlifTypeObject*)(obj));
+
+		if (alifDict_getItemRef(dict, name, &res) != 0) {
+			ALIF_DECREF(mro);
+			return res;
+		}
+
+		i++;
+	} while (i < n);
+	ALIF_DECREF(mro);
+	return NULL;
+}
+
+static AlifObject* do_super_lookup(SuperObject* su, AlifTypeObject* su_type, AlifObject* su_obj,
+	AlifTypeObject* su_obj_type, AlifObject* name, int* method)
+{
+	AlifObject* res;
+	int temp_su = 0;
+
+	if (su_obj_type == NULL) {
+		goto skip;
+	}
+
+	res = super_lookup_descr(su_type, su_obj_type, name);
+	if (res != NULL) {
+		if (method && alifType_hasFeature(ALIF_TYPE(res), ALIFTPFLAGS_METHOD_DESCRIPTOR)) {
+			*method = 1;
+		}
+		else {
+			DescrGetFunc f = ALIF_TYPE(res)->descrGet;
+			if (f != NULL) {
+				AlifObject* res2;
+				res2 = f(res,
+					/* Only pass 'obj' param if this is instance-mode super
+					(See SF ID #743627)  */
+					(su_obj == (AlifObject*)su_obj_type) ? NULL : su_obj,
+					(AlifObject*)su_obj_type);
+				ALIF_SETREF(res, res2);
+			}
+		}
+
+		return res;
+	}
+
+skip:
+	if (su == NULL) {
+		AlifObject* args[] = { (AlifObject*)su_type, su_obj };
+		su = (SuperObject*)alifObject_vectorCall((AlifObject*)&_alifSuperType_, args, 2, NULL);
+		if (su == NULL) {
+			return NULL;
+		}
+		temp_su = 1;
+	}
+	res = alifObject_genericGetAttr((AlifObject*)su, name);
+	if (temp_su) {
+		ALIF_DECREF(su);
+	}
+	return res;
+}
+
+static AlifTypeObject* supercheck(AlifTypeObject* type, AlifObject* obj)
+{
+
+	if (ALIFTYPE_CHECK(obj) && alifType_isSubType((AlifTypeObject*)obj, type)) {
+		return (AlifTypeObject*)ALIF_NEWREF(obj);
+	}
+
+	/* Normal case */
+	if (alifType_isSubType(ALIF_TYPE(obj), type)) {
+		return (AlifTypeObject*)ALIF_NEWREF(ALIF_TYPE(obj));
+	}
+	else {
+		AlifObject* class_attr;
+		AlifObject* strClass = alifUStr_fromString(L"__class__");
+		if (alifObject_getOptionalAttr(obj, strClass, &class_attr) < 0) {
+			return NULL;
+		}
+		if (class_attr != NULL &&
+			ALIFTYPE_CHECK(class_attr) &&
+			(AlifTypeObject*)class_attr != ALIF_TYPE(obj))
+		{
+			int ok = alifType_isSubType(
+				(AlifTypeObject*)class_attr, type);
+			if (ok) {
+				return (AlifTypeObject*)class_attr;
+			}
+		}
+		ALIF_XDECREF(class_attr);
+	}
+
+	const wchar_t* type_or_instance, * obj_str;
+
+	if (ALIFTYPE_CHECK(obj)) {
+		type_or_instance = L"type";
+		obj_str = ((AlifTypeObject*)obj)->name_;
+	}
+	else {
+		type_or_instance = L"instance of";
+		obj_str = ALIF_TYPE(obj)->name_;
+	}
+
+
+	return NULL;
+}
+
+AlifObject* alifSuper_lookup(AlifTypeObject* su_type, AlifObject* su_obj, AlifObject* name, int* method)
+{
+	AlifTypeObject* su_obj_type = supercheck(su_type, su_obj);
+	if (su_obj_type == NULL) {
+		return NULL;
+	}
+	AlifObject* res = do_super_lookup(NULL, su_type, su_obj, su_obj_type, name, method);
+	ALIF_DECREF(su_obj_type);
+	return res;
+}
+
+AlifTypeObject _alifSuperType_ = {
+	ALIFVAROBJECT_HEAD_INIT(&_alifTypeType_, 0)
+	L"super",                                    /* tp_name */
+	sizeof(SuperObject),                        /* tp_basicsize */
+	0,                                          /* tp_itemsize */
+	/* methods */
+	0, //super_dealloc,                              /* tp_dealloc */
+	0,                                          /* tp_vectorcall_offset */
+	0,                                          /* tp_getattr */
+	0,                                          /* tp_setattr */
+	0, //super_repr,                                 /* tp_repr */
+	0,                                          /* tp_as_number */
+	0,                                          /* tp_as_sequence */
+	0,                                          /* tp_as_mapping */
+	0,                                          /* tp_hash */
+	0,                                          /* tp_call */
+	0,                                          /* tp_str */
+	0, //super_getattro,                             /* tp_getattro */
+	0,                                          /* tp_setattro */
+	0,                                          /* tp_as_buffer */
+	ALIFTPFLAGS_DEFAULT | ALIFTPFLAGS_HAVE_GC |
+		ALIFTPFLAGS_BASETYPE,                    /* tp_flags */
+	0, //super_doc,                                  /* tp_doc */
+	0, //super_traverse,                             /* tp_traverse */
+	0,                                          /* tp_clear */
+	0,                                          /* tp_richcompare */
+	0,                                          /* tp_weaklistoffset */
+	0,                                          /* tp_iter */
+	0,                                          /* tp_iternext */
+	0,                                          /* tp_methods */
+	0, //super_members,                              /* tp_members */
+	0,                                          /* tp_getset */
+	0,                                          /* tp_base */
+	0,                                          /* tp_dict */
+	0, //super_descr_get,                            /* tp_descr_get */
+	0,                                          /* tp_descr_set */
+	0,                                          /* tp_dictoffset */
+	0, //super_init,                                 /* tp_init */
+	0, //PyType_GenericAlloc,                        /* tp_alloc */
+	0, //PyType_GenericNew,                          /* tp_new */
+	0, //PyObject_GC_Del,                            /* tp_free */
+	0, //.tp_vectorcall = (vectorcallfunc)super_vectorcall,
+};

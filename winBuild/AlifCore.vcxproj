@@ -55,6 +55,7 @@
     <ClInclude Include="..\source\Include\Core\AlifCore_Import.h" />
     <ClInclude Include="..\source\Include\Core\AlifCore_InitConfig.h" />
     <ClInclude Include="..\source\Include\Core\AlifCore_InstructionSeq.h" />
+    <ClInclude Include="..\source\Include\Core\AlifCore_Instruments.h" />
     <ClInclude Include="..\source\Include\Core\AlifCore_Integer.h" />
     <ClInclude Include="..\source\Include\Core\AlifCore_Interpreter.h" />
     <ClInclude Include="..\source\Include\Core\AlifCore_Intrinsics.h" />

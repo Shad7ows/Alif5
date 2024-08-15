@@ -11,15 +11,15 @@
 #include "AlifCore_OpCodeUtils.h"
 #include "AlifCore_AlifState.h"
 #include "AlifCore_Function.h"
+#include "AlifCore_Instruments.h"
 #include "AlifCore_Integer.h"
 #include "AlifCore_Tuple.h"
 #include "AlifCore_Frame.h"
 #include "AlifCore_Dict.h"
-
-
+#include "AlifCore_StackRef.h"
 #include "DictObject.h"
 #include "OpCode.h"
-
+#include "AlifCore_Code.h"
 #include "AlifEvalMacros.h"
 
 
@@ -147,10 +147,11 @@ AlifObject* alifEval_evalFrameDefault(AlifThread* _thread,
 startFrame:
 
 	nextInstr = _frame->instrPtr;
-
+	AlifCodeUnit buffer[20];
+	memcpy(buffer, _frame->instrPtr, 20);
 resumeFrame:
 	stackPtr = alifFrame_getStackPointer(_frame);
-
+	
 
 	DISPATCH();
 
@@ -158,6 +159,8 @@ dispatchOpCode:
 	switch (opCode)
 	{
 //#include "OpCodeCases.h"
+
+
 	TARGET(RESUME) {
 		_frame->instrPtr = nextInstr;
 		nextInstr += 1;
@@ -170,6 +173,51 @@ dispatchOpCode:
 #endif  /* ENABLE_SPECIALIZATION */
 			}
 		}
+		DISPATCH();
+	}
+	TARGET(RESERVED) {
+		_frame->instrPtr = nextInstr;
+		nextInstr += 1;
+		//INSTRUCTION_STATS(RESERVED);
+		//Py_FatalError("Executing RESERVED instruction.");
+		DISPATCH();
+	}
+	TARGET(BUILD_MAP) {
+		_frame->instrPtr = nextInstr;
+		nextInstr += 1;
+		//INSTRUCTION_STATS(BUILD_MAP);
+		AlifStackRef* values{};
+		AlifStackRef map{};
+		values->bits = (uintptr_t)& stackPtr[-opArg * 2];
+		STACKREFS_TO_ALIFOBJECTS(values, opArg * 2, values_o);
+		if ((values_o)) {
+			for (int _i = opArg * 2; --_i >= 0;) {
+				ALIFSTACKREF_CLOSE(values[_i]);
+			}
+			if (true) {
+				stackPtr += -opArg * 2;
+				//goto error;
+				exit(-1);
+
+			}
+		}
+		AlifObject* map_o = alifDict_fromItems(
+			values_o, 2,
+			values_o + 1, 2,
+			opArg);
+		//STACKREFS_TO_PYOBJECTS_CLEANUP(values_o);
+		for (int _i = opArg * 2; --_i >= 0;) {
+			ALIFSTACKREF_CLOSE(values[_i]);
+		}
+		if (map_o == NULL) {
+			stackPtr += -opArg * 2;
+			//goto error;
+			exit(-1);
+
+		}
+		map.bits = ALIFSTACKREF_FROMALIFOBJECTSTEAL(map_o);
+		stackPtr[-opArg * 2] = (AlifObject*)map.bits;
+		stackPtr += 1 - opArg * 2;
 		DISPATCH();
 	}
 	TARGET(LOAD_CONST) {
@@ -189,28 +237,53 @@ dispatchOpCode:
 		AlifObject* modOrClassDict = LOCALS();
 		if (modOrClassDict == nullptr) {
 			// error
+			exit(-1);
+
 			//goto error;
 		}
 		AlifObject* name = GETITEM(FRAME_CO_NAMES, opArg);
 		if (alifMapping_getOptionalItem(modOrClassDict, name, &v) < 0) {
 			//goto error;
+			exit(-1);
+
 		}
 		if (v == nullptr) {
 			if (alifDict_getItemRef(GLOBALS(), name, &v) < 0) {
 				//goto error;
+				exit(-1);
+
 			}
 			if (v == nullptr) {
 				if (alifMapping_getOptionalItem(BUILTINS(), name, &v) < 0) {
 					//goto error;
+					exit(-1);
+
 				}
 				//if (v == nullptr) {
 				//	alifEval_formatExcCheckArg(_thread, alifExcNameError, NAME_ERROR_MSG, name);
 				//	goto error;
+				exit(-1);
+
 				//}
 			}
 		}
 		stackPtr[0] = v;
 		stackPtr += 1;
+		DISPATCH();
+	}
+	TARGET(STORE_GLOBAL) {
+		_frame->instrPtr = nextInstr;
+		nextInstr += 1;
+		//INSTRUCTION_STATS(STORE_GLOBAL);
+		AlifStackRef v;
+		v.bits = (uintptr_t)stackPtr[-1];
+		AlifObject* name = GETITEM(FRAME_CO_NAMES, opArg);
+		int err = alifDict_setItem(GLOBALS(), name, ALIFSTACKREF_ASALIFOBJECTBORROW(v));
+		ALIFSTACKREF_CLOSE(v);
+		if (err) {
+			exit(-1);
+		}// goto pop_1_error;
+		stackPtr += -1;
 		DISPATCH();
 	}
 	TARGET(STORE_NAME) {
@@ -223,6 +296,8 @@ dispatchOpCode:
 		int err;
 		if (ns == nullptr) {
 			// error
+			exit(-1);
+
 			ALIF_DECREF(v);
 			//if (true) goto pop_1_error;
 		}
@@ -277,6 +352,48 @@ dispatchOpCode:
 		stackPtr += 1;
 		DISPATCH();
 	}
+	TARGET(MAKE_FUNCTION) {
+		_frame->instrPtr = nextInstr;
+		nextInstr += 1;
+		//INSTRUCTION_STATS(MAKE_FUNCTION);
+		AlifStackRef codeobj_st;
+		AlifStackRef func;
+		codeobj_st.bits = (uintptr_t)stackPtr[-1];
+		AlifObject* codeobj = ALIFSTACKREF_ASALIFOBJECTBORROW(codeobj_st);
+		AlifFunctionObject* funcObj = (AlifFunctionObject*)
+			alifNew_function(codeobj, GLOBALS());
+		ALIFSTACKREF_CLOSE(codeobj_st);
+		if (funcObj == NULL) {
+			//goto error;
+			1 + 3;
+			exit(-1);
+		}
+		//alifFunction_SetVersion(
+			//funcObj, ((AlifCodeObject*)codeobj)->co_version);
+		func.bits = (uintptr_t)((AlifObject*)funcObj);
+		stackPtr[-1] = (AlifObject*)func.bits;
+		DISPATCH();
+	}
+	TARGET(LOAD_BUILD_CLASS) {
+		_frame->instrPtr = nextInstr;
+		nextInstr += 1;
+		//INSTRUCTION_STATS(LOAD_BUILD_CLASS);
+		AlifStackRef bc{};
+		AlifObject* bc_o;
+		AlifObject* str = alifUStr_fromString(L"__build_class__");
+		if (alifMapping_getOptionalItem(BUILTINS(), str, &bc_o) < 0) {
+			//goto error;
+			exit(-1);
+		}
+		//if (bc_o == NULL) {
+			//exit(-1);
+			//if (true) goto error;
+		//}
+		bc.bits = ALIFSTACKREF_FROMALIFOBJECTSTEAL(bc_o);
+		stackPtr[0] = (AlifObject*)bc.bits;
+		stackPtr += 1;
+		DISPATCH();
+	}
 	TARGET(POP_TOP) {
 		_frame->instrPtr = nextInstr;
 		nextInstr += 1;
@@ -284,6 +401,13 @@ dispatchOpCode:
 		value = stackPtr[-1];
 		ALIF_DECREF(value);
 		stackPtr += -1;
+		DISPATCH();
+	}
+	TARGET(CACHE) {
+		_frame->instrPtr = nextInstr;
+		nextInstr += 1;
+		//INSTRUCTION_STATS(CACHE);
+		//ALIF_FatalError("Executing a cache.");
 		DISPATCH();
 	}
 	TARGET(CALL) {
@@ -406,6 +530,142 @@ dispatchOpCode:
 			LOAD_IP(_frame->returnOffset);
 			//LLTRACE_RESUME_FRAME();
 		}
+		DISPATCH();
+	}
+	TARGET(LOAD_SUPER_ATTR) {
+		_frame->instrPtr = nextInstr;
+		nextInstr += 2;
+		//INSTRUCTION_STATS(LOAD_SUPER_ATTR);
+		PREDICTED(LOAD_SUPER_ATTR);
+		AlifCodeUnit* this_instr = nextInstr - 2;
+		(void)this_instr;
+		AlifStackRef global_super_st;
+		AlifStackRef class_st;
+		AlifStackRef self_st;
+		AlifStackRef attr;
+		AlifStackRef null = ALIFSTACKREF_NULL;
+		class_st.bits = (uintptr_t)stackPtr[-2];
+		global_super_st.bits = (uintptr_t)stackPtr[-3];
+		{
+			uint16_t counter = read_u16(&this_instr[1].cache);
+			(void)counter;
+#if ENABLE_SPECIALIZATION
+			int load_method = opArg & 1;
+			if (ADAPTIVE_COUNTER_TRIGGERS(counter)) {
+				nextInstr = this_instr;
+				alifSpecialize_loadSuperAttr(global_super_st, class_st, nextInstr, load_method);
+				DISPATCH_SAME_OPARG();
+			}
+			//STAT_INC(LOAD_SUPER_ATTR, deferred);
+			ADVANCE_ADAPTIVE_COUNTER(this_instr[1].counter);
+#endif  /* ENABLE_SPECIALIZATION */
+		}
+		self_st.bits = (uintptr_t)stackPtr[-1];
+		{
+			AlifObject* global_super = ALIFSTACKREF_ASALIFOBJECTBORROW(global_super_st);
+			AlifObject* class_ = ALIFSTACKREF_ASALIFOBJECTBORROW(class_st);
+			AlifObject* self = ALIFSTACKREF_ASALIFOBJECTBORROW(self_st);
+			if (opCode == INSTRUMENTED_LOAD_SUPER_ATTR) {
+				AlifObject* arg = opArg & 2 ? class_ : &_alifInstrumentationMissing_;
+				//int err = _Py_call_instrumentation_2args(
+					//tstate, PY_MONITORING_EVENT_CALL,
+					//frame, this_instr, global_super, arg);
+				//if (err) goto pop_3_error;
+			}
+			AlifObject* stack[] = { class_, self };
+			AlifObject* super = alifObject_vectorCall(global_super, stack, opArg & 2, NULL);
+//			if (opcode == INSTRUMENTED_LOAD_SUPER_ATTR) {
+//				AlifObject* arg = opArg & 2 ? class : &_PyInstrumentation_MISSING;
+//				if (super == NULL) {
+//					_Py_call_instrumentation_exc2(
+//						tstate, PY_MONITORING_EVENT_C_RAISE,
+//						frame, this_instr, global_super, arg);
+//				}
+//				else {
+//					int err = _Py_call_instrumentation_2args(
+//						tstate, PY_MONITORING_EVENT_C_RETURN,
+//						frame, this_instr, global_super, arg);
+//					if (err < 0) {
+//						ALIF_CLEAR(super);
+//					}
+//				}
+//			}
+			ALIFSTACKREF_CLOSE(global_super_st);
+			ALIFSTACKREF_CLOSE(class_st);
+			ALIFSTACKREF_CLOSE(self_st);
+//			if (super == NULL) goto pop_3_error;
+			AlifObject* name = GETITEM(FRAME_CO_NAMES, opArg >> 2);
+			attr.bits = ALIFSTACKREF_FROMALIFOBJECTSTEAL(alifObject_getAttr(super, name));
+			ALIF_DECREF(super);
+//			if (PyStackRef_IsNull(attr)) goto pop_3_error;
+			null = ALIFSTACKREF_NULL;
+		}
+		stackPtr[-3] = (AlifObject*)attr.bits;
+		if (opArg & 1) stackPtr[-2] = nullptr;
+		stackPtr += -2 + (opArg & 1);
+		DISPATCH();
+	}
+	TARGET(LOAD_SUPER_ATTR_ATTR) {
+		_frame->instrPtr = nextInstr;
+		nextInstr += 2;
+		//INSTRUCTION_STATS(LOAD_SUPER_ATTR_ATTR);
+		AlifStackRef global_super_st;
+		AlifStackRef class_st;
+		AlifStackRef self_st;
+		AlifStackRef attr_st;
+		/* Skip 1 cache entry */
+		self_st.bits = (uintptr_t)stackPtr[-1];
+		class_st.bits = (uintptr_t)stackPtr[-2];
+		global_super_st.bits = (uintptr_t)stackPtr[-3];
+		AlifObject* global_super = ALIFSTACKREF_ASALIFOBJECTBORROW(global_super_st);
+		AlifObject* class_ = ALIFSTACKREF_ASALIFOBJECTBORROW(class_st);
+		AlifObject* self = ALIFSTACKREF_ASALIFOBJECTBORROW(self_st);
+		DEOPT_IF(global_super != (AlifObject*)&_alifSuperType_, LOAD_SUPER_ATTR);
+		DEOPT_IF(!ALIFTYPE_CHECK(class_), LOAD_SUPER_ATTR);
+		//STAT_INC(LOAD_SUPER_ATTR, hit);
+		AlifObject* name = GETITEM(FRAME_CO_NAMES, opArg >> 2);
+		AlifObject* attr = alifSuper_lookup((AlifTypeObject*)class_, self, name, NULL);
+		ALIFSTACKREF_CLOSE(global_super_st);
+		ALIFSTACKREF_CLOSE(class_st);
+		ALIFSTACKREF_CLOSE(self_st);
+		// if (attr == NULL) goto pop_3_error;
+		attr_st.bits = ALIFSTACKREF_FROMALIFOBJECTSTEAL(attr);
+		stackPtr[-3] = (AlifObject*)attr_st.bits;
+		stackPtr += -2;
+		DISPATCH();
+	}
+	TARGET(SET_FUNCTION_ATTRIBUTE) {
+		_frame->instrPtr = nextInstr;
+		nextInstr += 1;
+		//INSTRUCTION_STATS(SET_FUNCTION_ATTRIBUTE);
+		AlifStackRef attr_st;
+		AlifStackRef func_st;
+		func_st.bits = (uintptr_t)stackPtr[-1];
+		attr_st.bits = (uintptr_t)stackPtr[-2];
+		AlifObject* func = ALIFSTACKREF_ASALIFOBJECTBORROW(func_st);
+		AlifObject* attr = ALIFSTACKREF_ASALIFOBJECTBORROW(attr_st);
+		AlifFunctionObject* func_obj = (AlifFunctionObject*)func;
+		switch (opArg) {
+		case MAKE_FUNCTION_CLOSURE:
+			func_obj->funcClosure = attr;
+			break;
+		//case MAKE_FUNCTION_ANNOTATIONS:
+			//func_obj->func_annotations = attr;
+			//break;
+		case MAKE_FUNCTION_KWDEFAULTS:
+			func_obj->funcKwdefaults = attr;
+			break;
+		case MAKE_FUNCTION_DEFAULTS:
+			func_obj->funcDefaults = attr;
+			break;
+		//case MAKE_FUNCTION_ANNOTATE:
+			//func_obj->func_annotate = attr;
+			//break;
+		//default:
+			//ALIF_UNREACHABLE();
+		}
+		stackPtr[-2] = (AlifObject*)func_st.bits;
+		stackPtr += -1;
 		DISPATCH();
 	}
 	TARGET(INTERPRETER_EXIT) {
@@ -750,7 +1010,7 @@ AlifObject* alifEval_vector(AlifThread* _thread, AlifFunctionObject* _func, Alif
 	AlifObject* const* _args, AlifUSizeT _argcount, AlifObject* _kwnames) { 
 
 	ALIF_INCREF(_func);
-	//ALIF_XINCREF(_locals);
+	ALIF_XINCREF(_locals);
 	for (AlifUSizeT i = 0; i < _argcount; i++) {
 		ALIF_INCREF(_args[i]);
 	}

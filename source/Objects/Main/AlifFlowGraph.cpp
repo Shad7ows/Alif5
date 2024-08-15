@@ -300,17 +300,17 @@ static AlifIntT normalize_jumpsInBlock(AlifFlowGraph* _cfg, AlifCFGBasicBlock* _
 
 	AlifIntT reversedOpCode = 0;
 	switch (last->opCode) {
-	case POP_JUMPIF_NOTNONE:
-		reversedOpCode = POP_JUMPIF_NONE;
+	case POP_JUMP_IF_NOT_NONE:
+		reversedOpCode = POP_JUMP_IF_NONE;
 		break;
-	case POP_JUMPIF_NONE:
-		reversedOpCode = POP_JUMPIF_NOTNONE;
+	case POP_JUMP_IF_NONE:
+		reversedOpCode = POP_JUMP_IF_NOT_NONE;
 		break;
-	case POP_JUMPIF_FALSE:
-		reversedOpCode = POP_JUMPIF_TRUE;
+	case POP_JUMP_IF_FALSE:
+		reversedOpCode = POP_JUMP_IF_TRUE;
 		break;
-	case POP_JUMPIF_TRUE:
-		reversedOpCode = POP_JUMPIF_FALSE;
+	case POP_JUMP_IF_TRUE:
+		reversedOpCode = POP_JUMP_IF_FALSE;
 		break;
 	}
 
@@ -516,8 +516,8 @@ static AlifIntT basicBlock_optimizeLoadConst(AlifCFGBasicBlock* _cfgb, AlifObjec
 		}
 		AlifIntT nextop = i + 1 < _cfgb->iUsed ? _cfgb->instr[i + 1].opCode : 0;
 		switch (nextop) {
-		case POP_JUMPIF_FALSE:
-		case POP_JUMPIF_TRUE:
+		case POP_JUMP_IF_FALSE:
+		case POP_JUMP_IF_TRUE:
 		{
 			/* Remove LOAD_CONST const; conditional jump */
 			AlifObject* cnt = get_constValue(opcode, oparg, _consts);
@@ -528,7 +528,7 @@ static AlifIntT basicBlock_optimizeLoadConst(AlifCFGBasicBlock* _cfgb, AlifObjec
 			if (is_true == -1) return -1;
 
 			INSTR_SET_OP0(inst, NOP);
-			AlifIntT jumpIfTrue = nextop == POP_JUMPIF_TRUE;
+			AlifIntT jumpIfTrue = nextop == POP_JUMP_IF_TRUE;
 			if (is_true == jumpIfTrue) {
 				_cfgb->instr[i + 1].opCode = JUMP;
 			}
@@ -570,15 +570,15 @@ static AlifIntT basicBlock_optimizeLoadConst(AlifCFGBasicBlock* _cfgb, AlifObjec
 				jumpInstr = &_cfgb->instr[i + 3];
 			}
 			bool invert = isInstr->opArg;
-			if (jumpInstr->opCode == POP_JUMPIF_FALSE) {
+			if (jumpInstr->opCode == POP_JUMP_IF_FALSE) {
 				invert = !invert;
 			}
-			else if (jumpInstr->opCode != POP_JUMPIF_TRUE) {
+			else if (jumpInstr->opCode != POP_JUMP_IF_TRUE) {
 				break;
 			}
 			INSTR_SET_OP0(inst, NOP);
 			INSTR_SET_OP0(isInstr, NOP);
-			jumpInstr->opCode = invert ? POP_JUMPIF_NOTNONE : POP_JUMPIF_NONE;
+			jumpInstr->opCode = invert ? POP_JUMP_IF_NOT_NONE : POP_JUMP_IF_NONE;
 			break;
 		}
 		case RETURN_VALUE:

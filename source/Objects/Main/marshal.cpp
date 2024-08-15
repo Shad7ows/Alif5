@@ -233,6 +233,9 @@ static AlifObject* r_object(Rfile* p) // 1005
 	int64_t idx = 0;
 	long i, n;
 	int type, code = r_byte(p);
+	if (code == 0) {
+
+	}
 	int flag, is_interned = 0;
 	AlifObject* retval = NULL;
 
@@ -266,10 +269,14 @@ static AlifObject* r_object(Rfile* p) // 1005
 
 	case TYPE_STOPITER:
 		//retval = ALIF_NEWREF(_alifExcStopIteration_);
+		exit(-1);
+
 		break;
 
 	case TYPE_ELLIPSIS:
 		//retval = ALIF_ELLIPSIS;
+		exit(-1);
+
 		break;
 
 	case TYPE_FALSE:
@@ -286,15 +293,18 @@ static AlifObject* r_object(Rfile* p) // 1005
 		R_REF(retval);
 		break;
 
-	//case TYPE_INT64:
-	//	retval = r_long64(p);
+	case TYPE_INT64:
+		exit(-1);
+		//	retval = r_long64(p);
 	//	R_REF(retval);
-	//	break;
+		break;
 
-	//case TYPE_LONG:
+	case TYPE_LONG:
+		exit(-1);
+
 	//	retval = r_alifLong(p);
 	//	R_REF(retval);
-	//	break;
+		break;
 
 	case TYPE_FLOAT:
 	{
@@ -312,25 +322,27 @@ static AlifObject* r_object(Rfile* p) // 1005
 		break;
 	}
 
-	//case TYPE_COMPLEX:
-	//{
+	case TYPE_COMPLEX:
+	{
+		exit(-1);
 	//	alif_complex c;
 	//	c.real = r_float_str(p);
 	//	c.imag = r_float_str(p);
 	//	retval = alifComplex_FromCComplex(c);
 	//	R_REF(retval);
 	//	break;
-	//}
+	}
 
-	//case TYPE_BINARY_COMPLEX:
-	//{
+	case TYPE_BINARY_COMPLEX:
+	{
+		exit(-1);
 	//	alif_complex c;
 	//	c.real = r_float_bin(p);
 	//	c.imag = r_float_bin(p);
 	//	retval = alifComplex_FromCComplex(c);
 	//	R_REF(retval);
 	//	break;
-	//}
+	}
 
 	case TYPE_STRING:
 	{
@@ -378,7 +390,7 @@ static AlifObject* r_object(Rfile* p) // 1005
 			ptr = r_string(n, p);
 			if (ptr == NULL)
 				break;
-			v = alifUStr_fromKindAndData(USTR_1BYTE, ptr, n);
+			v = alifUStr_fromKindAndData(USTR_2BYTE, ptr, n);
 			if (v == NULL)
 				break;
 			if (is_interned) {
@@ -443,6 +455,9 @@ static AlifObject* r_object(Rfile* p) // 1005
 			break;
 
 		for (i = 0; i < n; i++) {
+			if (n == 10 && i == 4) {
+				int a = 1 + 3;
+			}
 			v2 = r_object(p);
 			if (v2 == NULL) {
 				ALIF_SETREF(v, NULL);
@@ -611,32 +626,27 @@ static AlifObject* r_object(Rfile* p) // 1005
 		linetable = r_object(p);
 		if (linetable == NULL)
 			goto code_error;
-		//exceptiontable = r_object(p);
-		//if (exceptiontable == NULL)
-			//goto code_error;
+		exceptiontable = r_object(p);
+		if (exceptiontable == NULL)
+			goto code_error;
 
 		con = {
 			 filename,
 		     name,
 			 qualname,
 			 flags,
-
 			code,
 			firstlineno,
 			 linetable,
-
 			 consts,
 			names,
-
 			 localsplusnames,
 			 localspluskinds,
-
 			 argcount,
 			posonlyargcount,
 		 kwonlyargcount,
-
 			stacksize,
-
+			exceptiontable
 		};
 
 		if (alifCode_validate(&con) < 0) {

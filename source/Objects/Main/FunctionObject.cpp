@@ -1,5 +1,5 @@
 #include "alif.h"
-
+#include "AlifCore_Function.h"
 #include "AlifCore_AlifEval.h"
 #include "AlifCore_ModSupport.h"
 #include "AlifCore_Object.h"
@@ -57,6 +57,7 @@ AlifObject* alifNew_functionWithQualName(AlifObject* code, AlifObject* globals, 
 
 	AlifObject* consts = codeObj->consts;
 	AlifObject* doc;
+	AlifFunctionObject* op{};
 	if (alifTuple_getSize(consts) >= 1) {
 		doc = alifTuple_getItem(consts, 0);
 		if (!ALIFUSTR_CHECK(doc)) {
@@ -72,16 +73,16 @@ AlifObject* alifNew_functionWithQualName(AlifObject* code, AlifObject* globals, 
 	AlifObject* builtins = nullptr;
 	AlifObject* nameTemp = alifUStr_decodeStringToUTF8(L"__name__"); // temp
 	if (alifDict_getItemRef(globals, nameTemp, &module) < 0) {
-		//goto error;
+		goto error;
 	}
 
-	//builtins = alifEval_builtinsFromGlobals(tstate, globals); // borrowed ref
-	//if (builtins == nullptr) {
-		//goto error;
-	//}
-	//ALIF_INCREF(builtins);
+	builtins = alifEval_builtinsFromGlobals(tstate, globals); // borrowed ref
+	if (builtins == nullptr) {
+		goto error;
+	}
+	ALIF_INCREF(builtins);
 
-	AlifFunctionObject* op = ALIFOBJECT_GC_NEW(AlifFunctionObject, &_alifFunctionType_);
+	op = ALIFOBJECT_GC_NEW(AlifFunctionObject, &_alifFunctionType_);
 	if (op == nullptr) {
 		goto error;
 	}
@@ -99,7 +100,7 @@ AlifObject* alifNew_functionWithQualName(AlifObject* code, AlifObject* globals, 
 	op->funcWeakRefList = nullptr;
 	op->funcModule = module;
 	op->funcTypeParams = nullptr;
-	//op->vectorcall = alifFunction_vectorCall;
+	op->vectorCall = alifFunction_vectorCall;
 	op->funcVersion = 0;
 	ALIFOBJECT_GC_TRACK(op);
 	//handle_func_event(AlifFunction_EVENT_CREATE, op, nullptr);
@@ -116,6 +117,10 @@ error:
 	return nullptr;
 }
 
+AlifObject* alifNew_function(AlifObject* code, AlifObject* globals)
+{
+	return alifNew_functionWithQualName(code, globals, NULL);
+}
 
 AlifTypeObject _alifFunctionType_ = {
     //ALIFVarObject_HEAD_INIT(&PyType_Type, 0)

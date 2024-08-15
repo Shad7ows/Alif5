@@ -20,6 +20,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\source\Include\Core\AlifCore_Namespace.h" />
+    <ClInclude Include="..\source\Include\Core\AlifCore_StackRef.h" />
     <ClInclude Include="..\source\Include\Main\Abstract.h" />
     <ClInclude Include="..\source\Include\Main\AlifBuffer.h" />
     <ClInclude Include="..\source\Include\Main\AlifCapsule.h" />

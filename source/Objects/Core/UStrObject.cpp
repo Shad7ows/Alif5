@@ -678,7 +678,7 @@ alifUStr_fromUint16(const uint16_t* _u, int64_t _size)
 	//if (size_ == 0)
 	//	_RETURN_uStr_EMPTY();
 	if (_size == 1)
-		return uStr_wchar_t(_u[0]);
+		return uStr_wchar_t(find_maxChar((const wchar_t*)_u));
 
 	maxChar = find_maxChar((const wchar_t*)_u);
 	res_ = alifNew_uStr(_size, maxChar);

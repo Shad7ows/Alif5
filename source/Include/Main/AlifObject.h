@@ -113,6 +113,7 @@ static inline void alif_set_size(AlifVarObject* _ob, int64_t _size) {
 
 
 extern AlifTypeObject _alifTypeType_;
+extern AlifTypeObject _alifSuperType_;
 
 
 

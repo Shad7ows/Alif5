@@ -1233,7 +1233,7 @@ static const class Frozen* look_up_frozen(const wchar_t* name)
 class FrozenInfo {
 public:
 	AlifObject* nameobj;
-	const wchar_t* data;
+	const char* data;
 	int64_t size;
 	bool isPackage;
 	bool isAlias;
@@ -1260,7 +1260,7 @@ static FrozenStatus find_frozen(AlifObject* nameobj, struct FrozenInfo* info)
 	}
 	if (info != nullptr) {
 		info->nameobj = nameobj;  // borrowed
-		info->data = (const wchar_t*)p->code;
+		info->data = (const char*)p->code;
 		info->size = p->size;
 		info->isPackage = p->isPackage;
 		if (p->size < 0) {

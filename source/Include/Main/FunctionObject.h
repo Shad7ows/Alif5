@@ -47,6 +47,8 @@ public:
 extern AlifTypeObject _alifFunctionType_;
 
 
+AlifObject* alifNew_function(AlifObject* , AlifObject* );
+
 #define ALIF_FOREACH_FUNC_EVENT(_v) \
     _v(Create)                    \
     _v(Destroy)                   \
