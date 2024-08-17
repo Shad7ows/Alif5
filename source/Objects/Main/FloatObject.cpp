@@ -484,6 +484,11 @@ static void float_dealloc(AlifObject* object) {
 
 }
 
+void alifFloat_exactDealloc(AlifObject* obj)
+{
+	float_dealloc(obj);
+}
+
 static AlifObject* float_is_integer_(AlifObject* self) {
 
 	long double value = ((AlifFloatObject*)self)->digits_;

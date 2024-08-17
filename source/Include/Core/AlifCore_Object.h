@@ -79,6 +79,23 @@ static inline void alifSub_decref_specialized(AlifObject* _op, const Destructor 
     }
 }
 
+static inline void alifDecref_no_dealloc(AlifObject* op)
+{
+	if (alif_isImmortal(op)) {
+		return;
+	}
+	//ALIF_DECREF_STAT_INC();
+#ifdef ALIF_REF_DEBUG
+	ALIF_DEC_REFTOTAL(alifInterpreterState_Get());
+#endif
+	op->ref_--;
+#ifdef ALIF_DEBUG
+	if (op->ref_ <= 0) {
+	}
+#endif
+}
+
+
 static inline int
 alifSubType_hasFeature(AlifTypeObject* _type, unsigned long _feature) {
     return ((_type->flags_ & _feature) != 0);

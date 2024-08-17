@@ -61,3 +61,20 @@ enum AlifFunctionWatchEvent {
 	ALIF_FOREACH_FUNC_EVENT(ALIF_DEF_EVENT)
 #undef ALIF_DEF_EVENT
 };
+
+#define ALIFFUNCTION_CHECK(op) ALIF_IS_TYPE((op), &_alifFunctionType_)
+
+
+#define ALIFFUNCTION_CAST(func) \
+    (ALIFFUNCTION_CHECK(func)), ALIF_CAST(AlifFunctionObject*, func)
+
+
+static inline AlifObject* alifFunction_get_code(AlifObject* func) {
+	return ALIFFUNCTION_CAST(func)->funcCode;
+}
+#define ALIFFUNCTION_GET_CODE(func) alifFunction_get_code(ALIFOBJECT_CAST(func))
+
+static inline AlifObject* alifFunction_get_globals(AlifObject* func) {
+	return ALIFFUNCTION_CAST(func)->funcGlobals;
+}
+#define ALIFFUNCTION_GET_GLOBALS(func) alifFunction_get_globals(ALIFOBJECT_CAST(func))

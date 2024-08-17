@@ -19,3 +19,8 @@ AlifObject* alifFloat_fromString(AlifObject*);
 AlifObject* alifFloat_fromDouble(long double);
 
 long double alifFloat_asLongDouble(AlifObject*);
+
+void alifFloat_exactDealloc(AlifObject* );
+
+#define ALIFFLOAT_CHECK(op) ALIFOBJECT_TYPECHECK(op, &_alifFloatType)
+#define ALIFFLOAT_CHECKEXACT(op) ALIF_IS_TYPE((op), &_alifFloatType)

@@ -17,6 +17,13 @@
         DISPATCH_GOTO(); \
     }
 
+#define DISPATCH_INLINED(NEW_FRAME)                     \
+    do {                                                \
+        alifFrame_setStackPointer(_frame, stackPtr); \
+        (NEW_FRAME)->previous = _frame;                  \
+        _frame = _thread->currentFrame = (NEW_FRAME);     \
+        goto startFrame;                               \
+    } while (0)
 
 #define NEXTOPARG()  do { \
         AlifCodeUnit word  = {*(uint16_t*)nextInstr}; \
@@ -74,5 +81,27 @@
 
 #define LOAD_SP() stackPtr = alifFrame_getStackPointer(_frame);
 
+#define DECREF_INPUTS_AND_REUSE_FLOAT(left, right, dval, result) \
+do { \
+    if (ALIF_REFCNT(left) == 1) { \
+        ((AlifFloatObject *)left)->digits_ = (dval); \
+        alifSub_decref_specialized(right, alifFloat_exactDealloc);\
+        result = (left); \
+    } \
+    else if (ALIF_REFCNT(right) == 1)  {\
+        ((AlifFloatObject *)right)->digits_ = (dval); \
+        alifDecref_no_dealloc(left); \
+        result = (right); \
+    }\
+    else { \
+        result = alifFloat_fromDouble(dval); \
+        alifDecref_no_dealloc(left); \
+        alifDecref_no_dealloc(right); \
+    } \
+} while (0)
+
+
 #define STACKREFS_TO_ALIFOBJECTS(ARGS, ARG_COUNT, NAME) \
     AlifObject **NAME = (AlifObject **)ARGS; \
+
+#define CONVERSION_FAILED(NAME) (0)

@@ -214,6 +214,22 @@ call_instrumentation_vector(
 	return err;
 }
 
+int alifCall_instrumentationArg(
+	AlifThread* tstate, int event,
+	AlifInterpreterFrame* frame, AlifCodeUnit* instr, AlifObject* arg)
+{
+	AlifObject* args[4] = { NULL, NULL, NULL, arg };
+	return call_instrumentation_vector(tstate, event, frame, instr, 3, args);
+}
+
+int alifCall_instrumentation2Args(
+	AlifThread* tstate, int event,
+	AlifInterpreterFrame* frame, AlifCodeUnit* instr, AlifObject* arg0, AlifObject* arg1)
+{
+	AlifObject* args[5] = { NULL, NULL, NULL, arg0, arg1 };
+	return call_instrumentation_vector(tstate, event, frame, instr, 4, args);
+}
+
 static void callInstrumentation_vectorProtected(
 	AlifThread* tstate, int event,
 	AlifInterpreterFrame* frame, AlifCodeUnit* instr, int64_t nargs, AlifObject* args[])

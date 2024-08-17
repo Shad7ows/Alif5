@@ -99,6 +99,11 @@ static inline AlifObject** alifFrame_getStackPointer(AlifInterpreterFrame* _fram
 	return sp;
 }
 
+static inline void alifFrame_setStackPointer(AlifInterpreterFrame* frame, AlifObject** stack_pointer)
+{
+	frame->stacktop = (int)stack_pointer;
+}
+
 static inline bool alifThread_hasStackSpace(AlifThread* _thread, AlifIntT _size) { 
 	return _thread->dataStackTop != nullptr and _size < _thread->dataStackLimit - _thread->dataStackTop;
 }
