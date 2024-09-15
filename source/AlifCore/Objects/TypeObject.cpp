@@ -253,61 +253,61 @@ static AlifIntT type_ready(AlifTypeObject* _type, AlifTypeObject* _def, AlifIntT
 
 	start_readying(_type);
 
-	if (typeReady_preChecks(_type) < 0) {
-		goto error;
-	}
-
-	if (typeReady_setDict(_type) < 0) {
-		goto error;
-	}
-	if (typeReady_setBase(_type) < 0) {
-		goto error;
-	}
-	if (typeReady_setType(_type) < 0) {
-		goto error;
-	}
-	if (typeReady_setBases(_type, _initial) < 0) {
-		goto error;
-	}
-	if (typeReady_mro(_type, _initial) < 0) {
-		goto error;
-	}
-	if (typeReady_setNew(_type, _initial) < 0) {
-		goto error;
-	}
-	if (typeReady_fillDict(_type, _def) < 0) {
-		goto error;
-	}
-	if (_initial) {
-		if (typeReady_inherit(_type) < 0) {
-			goto error;
-		}
-		if (typeReady_preheader(_type) < 0) {
-			goto error;
-		}
-	}
-	if (typeReady_setHash(_type) < 0) {
-		goto error;
-	}
-	if (typeReady_addSubclasses(_type) < 0) {
-		goto error;
-	}
-	if (_initial) {
-		if (typeReady_managedDict(_type) < 0) {
-			goto error;
-		}
-		if (typeReady_postChecks(_type) < 0) {
-			goto error;
-		}
-	}
-
-	_type->flags |= ALIF_TPFLAGS_READY;
-	stop_readying(_type);
-
+//	if (typeReady_preChecks(_type) < 0) {
+//		goto error;
+//	}
+//
+//	if (typeReady_setDict(_type) < 0) {
+//		goto error;
+//	}
+//	if (typeReady_setBase(_type) < 0) {
+//		goto error;
+//	}
+//	if (typeReady_setType(_type) < 0) {
+//		goto error;
+//	}
+//	if (typeReady_setBases(_type, _initial) < 0) {
+//		goto error;
+//	}
+//	if (typeReady_mro(_type, _initial) < 0) {
+//		goto error;
+//	}
+//	if (typeReady_setNew(_type, _initial) < 0) {
+//		goto error;
+//	}
+//	if (typeReady_fillDict(_type, _def) < 0) {
+//		goto error;
+//	}
+//	if (_initial) {
+//		if (typeReady_inherit(_type) < 0) {
+//			goto error;
+//		}
+//		if (typeReady_preheader(_type) < 0) {
+//			goto error;
+//		}
+//	}
+//	if (typeReady_setHash(_type) < 0) {
+//		goto error;
+//	}
+//	if (typeReady_addSubclasses(_type) < 0) {
+//		goto error;
+//	}
+//	if (_initial) {
+//		if (typeReady_managedDict(_type) < 0) {
+//			goto error;
+//		}
+//		if (typeReady_postChecks(_type) < 0) {
+//			goto error;
+//		}
+//	}
+//
+//	_type->flags |= ALIF_TPFLAGS_READY;
+//	stop_readying(_type);
+//
 	return 0;
-
-error:
-	stop_readying(_type);
+//
+//error:
+//	stop_readying(_type);
 	return -1;
 }
 

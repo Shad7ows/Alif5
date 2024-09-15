@@ -22,6 +22,21 @@
 	(((_refcnt) << ALIF_REF_SHARED_SHIFT) + (_flags)) // 75
 
 
+static inline AlifSizeT alif_refCnt(AlifObject* _ob) { // 80
+#if !defined(ALIF_GIL_DISABLED)
+	return ob->refCnt;
+#else
+	uint32_t local = alifAtomic_loadUint32Relaxed(&_ob->refLocal);
+	if (local == ALIF_IMMORTAL_REFCNT_LOCAL) {
+		return ALIF_IMMORTAL_REFCNT;
+	}
+	AlifSizeT shared = alifAtomic_loadSizeRelaxed(&_ob->refShared);
+	return ALIF_STATIC_CAST(AlifSizeT, local) +
+		ALIF_ARITHMETIC_RIGHT_SHIFT(AlifSizeT, shared, ALIF_REF_SHARED_SHIFT);
+#endif
+}
+#define ALIF_REFCNT(ob) alif_refCnt(ALIFOBJECT_CAST(ob))
+
 static inline ALIF_ALWAYS_INLINE AlifIntT alif_isImmortal(AlifObject* op) { // 98
 	return (alifAtomic_loadUint32Relaxed(&op->refLocal) ==
 		ALIF_IMMORTAL_REFCNT_LOCAL);

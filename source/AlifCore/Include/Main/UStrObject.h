@@ -65,7 +65,7 @@ static inline AlifUCS4 alifUnicode_lowSurrogate(AlifUCS4 ch) { // 42
 }
 
 
-
+AlifObject* alifUStr_internFromString(const char* ); // 247
 
 
 
@@ -121,6 +121,10 @@ public:
 #define SSTATE_INTERNED_IMMORTAL_STATIC 3
 
 
+static inline unsigned int alifUStr_checkInterned(AlifObject* _op) { // 197
+	return ALIFASCIIOBJECT_CAST(_op)->state.interned;
+}
+#define ALIFUSTR_CHECK_INTERNED(_op) alifUStr_checkInterned(ALIFOBJECT_CAST(_op))
 
 
 static inline unsigned int alifUStr_isASCII(AlifObject* op) { // 211
@@ -285,3 +289,5 @@ AlifObject* alifUStrWriter_finish(AlifUStrWriter*); // 602
 
 
 void alifUStrWriter_dealloc(AlifUStrWriter*); // 607
+
+const char* alifUStr_asUTF8(AlifObject* ); // 625

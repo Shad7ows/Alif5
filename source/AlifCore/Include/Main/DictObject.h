@@ -47,6 +47,8 @@ public:
 };
 
 
+AlifIntT alifDict_setDefaultRef(AlifObject* , AlifObject* , AlifObject* , AlifObject** ); // 53
+
 
 // 78
 #define ALIF_FOREACH_DICT_EVENT(V) \

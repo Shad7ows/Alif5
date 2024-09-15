@@ -6,7 +6,7 @@
 #include "AlifCore_InitConfig.h"
 #include "AlifCore_Object.h"
 #include "AlifCore_State.h"
-
+#include "AlifCore_UStrObject.h"
 
 
 
@@ -147,11 +147,11 @@ AlifObject* alifObject_richCompare(AlifObject* _v, AlifObject* _w, AlifIntT _op)
 		//}
 		return nullptr;
 	}
-	if (alif_enterRecursiveCallThreadState(thread, " في المقارنة")) {
-		return nullptr;
-	}
+	//if (alif_enterRecursiveCallThreadState(thread, " في المقارنة")) {
+		//return nullptr;
+	//}
 	AlifObject* res_ = do_richCompare(thread, _v, _w, _op);
-	alif_leaveRecursiveCallThreadState(thread);
+	//alif_leaveRecursiveCallThreadState(thread);
 	return res_;
 }
 
@@ -215,7 +215,7 @@ AlifIntT alifObject_setAttr(AlifObject* _v, AlifObject* _name, AlifObject* _valu
 	AlifIntT err{};
 
 	if (!ALIFUSTR_CHECK(_name)) {
-		//alifErr_format(alifExc_typeError,
+		//alifErr_format(_alifExcTypeError_,
 			//"attribute name must be string, not '%.200s'",
 			//ALIF_TYPE(_name)->name);
 		return -1;
@@ -241,13 +241,13 @@ AlifIntT alifObject_setAttr(AlifObject* _v, AlifObject* _name, AlifObject* _valu
 	}
 	ALIF_DECREF(_name);
 	if (tp_->getAttr == nullptr and tp_->getAttro == nullptr) {
-		//alfiErr_format(alifExc_typeError,
+		//alfiErr_format(_alifExcTypeError_,
 			//"'%.100s' object has no attributes "
 			//"(%s .%U)", tp_->name,
 			//_value == nullptr ? "del" : "assign to", _name);
 	}
 	else {
-		//alifErr_format(alifExc_typeError,
+		//alifErr_format(_alifExcTypeError_,
 			//"'%.100s' object has only read-only attributes "
 			//"(%s .%U)", tp_->name,
 			//_value == nullptr ? "del" : "assign to", _name);
