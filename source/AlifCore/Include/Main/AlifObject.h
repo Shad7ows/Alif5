@@ -412,10 +412,10 @@ public:
 AlifObject* alifType_lookupRef(AlifTypeObject*, AlifObject*); // 281
 
 
-AlifObject* alifObject_genericGetAttrWithDict(AlifObject*, AlifObject*, AlifObject*, AlifIntT);
+
+AlifObject* alifObject_genericGetAttrWithDict(AlifObject* , AlifObject* , AlifObject* , AlifIntT ); // 299
 
 AlifIntT alifObject_genericSetAttrWithDict(AlifObject*, AlifObject*, AlifObject*, AlifObject*); // 301
-
 
 // 338
 #define ALIF_SETREF(_dst, _src) \

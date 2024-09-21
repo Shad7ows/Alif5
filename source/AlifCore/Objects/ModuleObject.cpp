@@ -6,7 +6,7 @@
 #include "AlifCore_Object.h"
 #include "AlifCore_ObjectDeferred.h" // هذا التضمين غير ضروري ويجب حذفه مع التقدم في البرنامج
 
-
+#include "OSDefs.h"
 
 
 
@@ -225,7 +225,77 @@ error:
 	return nullptr;
 }
 
+static AlifIntT getFile_originFromSpec(AlifObject* _spec, AlifObject** _pOrigin) { // 828
+	AlifObject* hasLocation = nullptr;
+	AlifIntT rc_ = alifObject_getOptionalAttr(_spec, &ALIF_ID(hasLocation), &hasLocation);
+	if (rc_ <= 0) {
+		return rc_;
+	}
+	rc_ = alifObject_isTrue(hasLocation);
+	ALIF_DECREF(hasLocation);
+	if (rc_ <= 0) {
+		return rc_;
+	}
+	AlifObject* origin = nullptr;
+	rc_ = alifObject_getOptionalAttr(_spec, &ALIF_ID(origin), &origin);
+	if (rc_ <= 0) {
+		return rc_;
+	}
+	if (!ALIFUSTR_CHECK(origin)) {
+		ALIF_DECREF(origin);
+		return 0;
+	}
+	*_pOrigin = origin;
+	return 1;
+}
 
+static AlifIntT is_module_possibly_shadowing(AlifObject* _origin) { // 859
+
+	if (_origin == nullptr) {
+		return 0;
+	}
+
+	const AlifConfig* config = alif_getConfig();
+	if (config->safePath) {
+		return 0;
+	}
+
+	wchar_t root[MAXPATHLEN + 1]{};
+	AlifSizeT size = alifUStr_asWideChar(_origin, root, MAXPATHLEN);
+	if (size < 0) {
+		return -1;
+	}
+	root[size] = L'\0';
+
+	wchar_t* sep_ = wcsrchr(root, SEP);
+	if (sep_ == nullptr) {
+		return 0;
+	}
+	if (wcscmp(sep_ + 1, L"__init__.py") == 0) {
+		*sep_ = L'\0';
+		sep_ = wcsrchr(root, SEP);
+		if (sep_ == nullptr) {
+			return 0;
+		}
+	}
+	*sep_ = L'\0';
+
+	wchar_t* sysPath0 = config->sysPath0;
+	if (!sysPath0) {
+		return 0;
+	}
+
+	wchar_t sys_path_0_buf[MAXPATHLEN];
+	if (sysPath0[0] == L'\0') {
+		if (!alif_wGetCWD(sys_path_0_buf, MAXPATHLEN)) {
+			return -1;
+		}
+		sysPath0 = sys_path_0_buf;
+	}
+
+	AlifIntT result = wcscmp(sysPath0, root) == 0;
+	return result;
+}
 
 AlifObject* alifModule_getAttroImpl(AlifModuleObject* _m, AlifObject* _name, AlifIntT _suppress) { // 921
 	AlifObject* attr{}, * modName{}, * getAttr{};
@@ -345,11 +415,15 @@ AlifObject* alifModule_getAttroImpl(AlifModuleObject* _m, AlifObject* _name, Ali
 			rc_ = alifModuleSpec_isUninitializedSubmodule(spec, _name);
 			if (rc_ > 0) {
 			//	alifErr_format(_alifExcAttributeError_,
+				//	alifErr_format(_alifExcAttributeError_,
+			//	alifErr_format(_alifExcAttributeError_,
 				//"cannot access submodule '%U' of module '%U' "
 					//"(most likely due to a circular import)",
 					//name, modName);
 			}
 			else if (rc_ == 0) {
+			//	alifErr_format(_alifExcAttributeError_,
+				//	alifErr_format(_alifExcAttributeError_,
 			//	alifErr_format(_alifExcAttributeError_,
 				//"module '%U' has no attribute '%U'",
 					//modName, name);

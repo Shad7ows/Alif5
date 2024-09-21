@@ -5,6 +5,10 @@
 */
 
 
+#define MS_WINDOWS
+
+
+
 #ifdef _WIN32
 	#define _WINDOWS
 	#if defined(_WIN64)

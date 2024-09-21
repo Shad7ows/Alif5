@@ -292,7 +292,7 @@ STRINGLIB(utf8Encoder)(AlifBytesWriter* _writer, AlifObject* _uStr,
 				*p_++ = (char)(0x80 | (ch & 0x3f));
 			}
 #if STRINGLIB_SIZEOF_CHAR > 1
-			else if (alifUnicode_isSurrogate(ch)) {
+			else if (alifUStr_isSurrogate(ch)) {
 				AlifSizeT startpos{}, endpos{}, newpos{};
 				AlifSizeT k{};
 				//if (_errorHandler == AlifErrorHandler_::Alif_Error_Unknown) {
@@ -302,7 +302,7 @@ STRINGLIB(utf8Encoder)(AlifBytesWriter* _writer, AlifObject* _uStr,
 				startpos = i_ - 1;
 				endpos = startpos + 1;
 
-				while ((endpos < _size) and alifUnicode_isSurrogate(_data[endpos]))
+				while ((endpos < _size) and alifUStr_isSurrogate(_data[endpos]))
 					endpos++;
 
 				/* Only overallocate the buffer if it's not the last write */

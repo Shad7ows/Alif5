@@ -34,7 +34,7 @@ static AlifIntT isValid_wideChar(wchar_t _ch) { // 118
 	   possibly valid. */
 	return 1;
 #endif
-	if (alifUnicode_isSurrogate(_ch)) {
+	if (alifUStr_isSurrogate(_ch)) {
 		// Reject lone surrogate characters
 		return 0;
 	}
@@ -256,3 +256,27 @@ wchar_t* alif_decodeLocale(const char* _arg, AlifUSizeT* _wlen) { // 663
 //
 //	return f;
 //}
+
+wchar_t* alif_wGetCWD(wchar_t* _buf, size_t _bufLen) { // 2620
+#ifdef MS_WINDOWS
+	int iBufLen = (int)min(_bufLen, INT_MAX);
+	return _wgetcwd(_buf, iBufLen);
+#else
+	char fName[MAXPATHLEN];
+	wchar_t* wName{};
+	size_t len_{};
+
+	if (getcwd(fName, ALIF_ARRAY_LENGTH(fName)) == nullptr)
+		return nullptr;
+	wName = Py_DecodeLocale(fName, &len_);
+	if (wName == nullptr)
+		return nullptr;
+	if (_bufLen <= len_) {
+		alifMem_objAlloc(wName);
+		return nullptr;
+	}
+	wcsncpy(_buf, wName, _bufLen);
+	alifMem_objAlloc(wName);
+	return _buf;
+#endif
+}

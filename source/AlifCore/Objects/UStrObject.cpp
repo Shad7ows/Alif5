@@ -630,6 +630,97 @@ AlifObject* alifUStr_fromString(const char* u) { // 2084
 	return alifUStr_decodeUTF8Stateful(u, (AlifSizeT)size, nullptr, nullptr);
 }
 
+static AlifSizeT uStrGet_wideCharSize(AlifObject* _uStr) { // 3218
+	AlifSizeT res_{};
+	res_ = ALIFUSTR_LENGTH(_uStr);
+#if SIZEOF_WCHAR_T == 2
+	if (ALIFUSTR_KIND(_uStr) == AlifUStr_4Byte_Kind) {
+		const AlifUCS4* s_ = ALIFUSTR_4BYTE_DATA(_uStr);
+		const AlifUCS4* end_ = s_ + res_;
+		for (; s_ < end_; ++s_) {
+			if (*s_ > 0xFFFF) {
+				++res_;
+			}
+		}
+	}
+#endif
+	return res_;
+}
+
+static void uStrCopy_asWideChar(AlifObject* _uStr, wchar_t* _w, AlifSizeT _size) { // 3241
+
+	if (ALIFUSTR_KIND(_uStr) == sizeof(wchar_t)) {
+		memcpy(_w, ALIFUSTR_DATA(_uStr), _size * sizeof(wchar_t));
+		return;
+	}
+
+	if (ALIFUSTR_KIND(_uStr) == AlifUStr_1Byte_Kind) {
+		const AlifUCS1* s_ = ALIFUSTR_1BYTE_DATA(_uStr);
+		for (; _size--; ++s_, ++_w) {
+			*_w = *s_;
+		}
+	}
+	else {
+#if SIZEOF_WCHAR_T == 4
+		const AlifUCS2* s = ALIFUSTR_2BYTE_DATA(_uStr);
+		for (; _size--; ++s_, ++_w) {
+			*_w = *s_;
+		}
+#else
+		const AlifUCS4* s_ = ALIFUSTR_4BYTE_DATA(_uStr);
+		for (; _size--; ++s_, ++_w) {
+			AlifUCS4 ch_ = *s_;
+			if (ch_ > 0xFFFF) {
+				*_w++ = alifUStr_highSurrogate(ch_);
+				if (!_size--)
+					break;
+				*_w = alifUStr_lowSurrogate(ch_);
+			}
+			else {
+				*_w = ch_;
+			}
+		}
+#endif
+	}
+}
+
+AlifSizeT alifUStr_asWideChar(AlifObject* _uStr,
+	wchar_t* _w,
+	AlifSizeT _size) { // 3296
+	AlifSizeT res_{};
+
+	if (_uStr == nullptr) {
+		//alifErr_badInternalCall();
+		return -1;
+	}
+	if (!ALIFUSTR_CHECK(_uStr)) {
+		//alifErr_badArgument();
+		return -1;
+	}
+
+	res_ = uStrGet_wideCharSize(_uStr);
+	if (_w == nullptr) {
+		return res_ + 1;
+	}
+
+	if (_size > res_) {
+		_size = res_ + 1;
+	}
+	else {
+		res_ = _size;
+	}
+	uStrCopy_asWideChar(_uStr, _w, _size);
+
+#ifdef HAVE_NON_UNICODE_WCHAR_T_REPRESENTATION
+	if (alif_localeUsesNonUStrWchar()) {
+		if (alif_encodeNonUStrWcharInPlace(_w, _size) < 0) {
+			return -1;
+		}
+	}
+#endif
+
+	return res_;
+}
 
 
 static AlifIntT uStr_fillUTF8(AlifObject*); // 4164
@@ -1049,8 +1140,8 @@ AlifIntT alif_decodeUTF8Ex(const char* s, AlifSizeT size, wchar_t** wstr, AlifUS
 			ALIF_UNREACHABLE();
 #else
 			/* write a surrogate pair */
-			uStr[outPos++] = (wchar_t)alifUnicode_highSurrogate(ch_);
-			uStr[outPos++] = (wchar_t)alifUnicode_lowSurrogate(ch_);
+			uStr[outPos++] = (wchar_t)alifUStr_highSurrogate(ch_);
+			uStr[outPos++] = (wchar_t)alifUStr_lowSurrogate(ch_);
 #endif
 		}
 		else {
@@ -1478,12 +1569,12 @@ static AlifObject* intern_common(AlifInterpreter* _interp,
 
 	AlifObject* t{};
 	{
-		AlifIntT res = alifDict_setDefaultRef(interned, _s, _s, &t);
-		if (res < 0) {
+		AlifIntT res_ = alifDict_setDefaultRef(interned, _s, _s, &t);
+		if (res_ < 0) {
 			//alifErr_clear();
 			return _s;
 		}
-		else if (res == 1) {
+		else if (res_ == 1) {
 			ALIF_DECREF(_s);
 			if (_immortalize and
 				ALIFUSTR_CHECK_INTERNED(t) == SSTATE_INTERNED_MORTAL) {

@@ -29,7 +29,9 @@ public:
 	AlifIntT bufferedStdio{};
 
 	AlifIntT quite{};
-
+#ifdef MS_WINDOWS
+#endif
+	AlifIntT safePath{};
 #ifdef ALIF_GIL_DISABLED
 	AlifIntT enableGIL{};
 #endif
@@ -40,6 +42,8 @@ public:
 	wchar_t* runCommand{};
 	wchar_t* runModule{};
 	wchar_t* runFilename{};
+
+	wchar_t* sysPath0{};
 
 	AlifIntT initMain{};
 };
